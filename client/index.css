@@ -1,0 +1,166 @@
+@import 'tailwindcss';
+
+/*
+ * The table is achromatic; the game is not.
+ *
+ * Everything that is chrome — panels, rails, type, buttons — is drawn in
+ * near-black and greys, so the only saturated colour anywhere on screen is
+ * the cards and whichever colour is currently live. When the active colour
+ * changes, the room changes temperature with it.
+ */
+
+@theme {
+  --color-felt: #0b0e13;
+  --color-felt-deep: #05070a;
+  --color-raised: #151a22;
+  --color-raised-2: #1d242f;
+  --color-edge: #2a323f;
+  --color-chalk: #f2f4f7;
+  --color-chalk-dim: #8a93a3;
+  --color-chalk-faint: #5b6472;
+
+  /* The four. Deepened a touch so they sit on near-black without buzzing. */
+  --color-uno-red: #e4322b;
+  --color-uno-yellow: #f5b222;
+  --color-uno-green: #2fa84f;
+  --color-uno-blue: #227fd6;
+
+  --color-uno-red-deep: #a81f1a;
+  --color-uno-yellow-deep: #b87c0c;
+  --color-uno-green-deep: #1c7735;
+  --color-uno-blue-deep: #145a9c;
+
+  /*
+   * Anything you would read out loud or count — room codes, card counts,
+   * scores, timers — is set in the utility face. Prose is not.
+   */
+  --font-display: 'Helvetica Neue', 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-card: 0.75rem;
+
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.24, 1);
+}
+
+:root {
+  color-scheme: dark;
+  /* Set by the table to whatever colour is live. */
+  --live: var(--color-chalk-faint);
+  --live-deep: #0b0e13;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-felt);
+  color: var(--color-chalk);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+/* Numbers should never jitter as they count down. */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+/* Focus is always visible, and always the same shape. */
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-chalk);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* The felt: a dark surface lit from the middle by whatever colour is live. */
+.table-felt {
+  background:
+    radial-gradient(120% 90% at 50% 42%, color-mix(in oklab, var(--live) 22%, transparent), transparent 62%),
+    radial-gradient(140% 120% at 50% 120%, var(--color-felt-deep), transparent 70%),
+    var(--color-felt);
+  transition: background 380ms var(--ease-snap);
+}
+
+/* Cards sit on the felt, so they cast a real shadow rather than a glow. */
+.card-shadow {
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.55));
+}
+
+.card-shadow-lift {
+  filter: drop-shadow(0 14px 22px rgb(0 0 0 / 0.6));
+}
+
+/* The hand on a narrow screen becomes a snap strip you can thumb through. */
+.snap-strip {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.snap-strip::-webkit-scrollbar {
+  display: none;
+}
+.snap-strip > * {
+  scroll-snap-align: center;
+}
+
+@keyframes pulse-live {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+  55% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.pulse-live {
+  animation: pulse-live 380ms var(--ease-snap);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 320ms var(--ease-snap) both;
+}
+
+/*
+ * Reduced motion switches off card flight and ambient movement. The game
+ * still says everything it needs to; it just stops moving to say it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
