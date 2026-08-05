@@ -1,5 +1,7 @@
 /**
- * For more details on how to configure Wrangler, refer to:
+ * One Worker serves everything: the built client through the Assets binding,
+ * plus /api/* and /ws. One `wrangler deploy`, one origin, no CORS.
+ *
  * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
 {
@@ -7,37 +9,39 @@
 	"name": "uno",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-08-05",
+
+	/**
+	 * No `nodejs_compat` flag: the Worker, the Durable Object and the shared
+	 * rules engine use Web-standard APIs only — crypto.getRandomValues,
+	 * structuredClone, WebSocketPair, URL.
+	 */
+
 	"assets": {
+		// `directory` is filled in by the Vite plugin when it writes the
+		// deployment config during `vite build`.
 		"not_found_handling": "single-page-application"
 	},
+
+	/** One Durable Object instance per room — the DO *is* the game. */
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "ROOM",
+				"class_name": "Room"
+			}
+		]
+	},
+
+	/** SQLite-backed classes are the ones available on the free plan. */
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["Room"]
+		}
+	],
+
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true,
-	"compatibility_flags": [
-		"nodejs_compat"
-	]
-	/**
-	 * Smart Placement
-	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	// "placement": {  "mode": "smart" }
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-	/**
-	 * Environment Variables
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-	 * Note: Use secrets to store sensitive data.
-	 * https://developers.cloudflare.com/workers/configuration/secrets/
-	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
-	/**
-	 * Service Bindings (communicate between multiple Workers)
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
-	 */
-	// "services": [  {   "binding": "MY_SERVICE",   "service": "my-service"  } ]
+	"upload_source_maps": true
 }
