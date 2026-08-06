@@ -6,6 +6,10 @@ Make a room, send the code, play.
 One Worker serves the whole thing: the built client through the Assets
 binding, plus `/api/*` and `/ws`. One origin, one `wrangler deploy`, no CORS.
 
+It is mounted at **parebaik.com/uno**, not at the root of a domain —
+`parebaik.com/*` belongs to a different Worker. The mount point is a single
+constant in `shared/base.ts`; set it to `''` to serve from a root again.
+
 ---
 
 ## Getting it running
@@ -20,8 +24,10 @@ npm run dev
 `/api/*` behave in development exactly as they do in production, against a
 real local Durable Object, while the client still hot-reloads.
 
-Open the URL it prints, hit **Create room**, and open the room link in a
-second window (or a private window) to be two players. Or add bots.
+Development runs under the same mount point as production, so the address is
+**http://localhost:5173/uno/** — the URL Vite prints. Hitting `/` redirects
+there. Open it, hit **Create room**, and open the room link in a second window
+(or a private window) to be two players. Or add bots.
 
 ```bash
 npm test          # rules engine, in Node
@@ -37,29 +43,59 @@ npm run lint
 npm run deploy    # build, then wrangler deploy
 ```
 
-`vite build` writes `dist/client` (the assets) and `dist/uno` (the Worker plus
-a generated `wrangler.json` with the assets directory filled in). `wrangler
-deploy` from the project root picks that generated config up automatically.
+`vite build` writes `dist/client` (the assets) and `dist/unoonline` (the Worker
+plus a generated `wrangler.json` with the assets directory filled in).
+`wrangler deploy` from the project root picks that generated config up
+automatically.
 
 The first deploy creates the `Room` Durable Object namespace from the `v1`
 migration in `wrangler.jsonc`. It uses `new_sqlite_classes`, which is the
 storage backend available on the free plan.
 
-### Putting it on your own domain
+### How the sub-path works
 
-1. Add the domain (or a subdomain) to your Cloudflare account as a zone, and
-   point its nameservers at Cloudflare.
-2. In the dashboard: **Workers & Pages → uno → Settings → Domains & Routes →
-   Add → Custom domain**, and enter e.g. `uno.example.com`. Cloudflare creates
-   the DNS record and the certificate for you.
+The zone has one Worker per area, and the most specific route pattern wins:
 
-Or declare it in `wrangler.jsonc` and let deploys manage it:
+| Route                    | Worker          |
+| ------------------------ | --------------- |
+| `parebaik.com/*`         | `parebaik-home` |
+| `parebaik.com/uno`       | `unoonline`     |
+| `parebaik.com/uno/*`     | `unoonline`     |
+
+Both `/uno` patterns are needed — `/uno/*` does not match a bare `/uno`. They
+are declared in `wrangler.jsonc`, so `wrangler deploy` keeps them in step.
+
+Three things then have to agree on the prefix, and all three read it from
+`shared/base.ts`:
+
+- **Vite's `base`**, so the built HTML asks for `/uno/assets/…`. Without it the
+  browser would ask `parebaik.com/assets/…` and reach the home Worker instead.
+- **The Worker**, which strips `/uno` off the front of every request before
+  routing it, and serves assets through the `ASSETS` binding with the prefix
+  removed — the manifest is rooted, the requests are not. `run_worker_first`
+  is on so the Worker sees the request before the asset router does.
+- **The client**, for `fetch`, the WebSocket URL, `history.pushState`, and the
+  room links people share.
+
+Anything arriving outside the mount point — the `workers.dev` preview URL, an
+old bookmark — gets a 302 to the same path under `/uno`.
+
+The domain itself needs a **proxied** DNS record at the apex for any of it to
+run; routes only fire on traffic that reaches Cloudflare. If the site is served
+entirely by Workers, an `AAAA` record for `parebaik.com` pointing at `100::`
+with the orange cloud on is the usual placeholder.
+
+### Putting it somewhere else
+
+Set `BASE_PATH` in `shared/base.ts` (use `''` for the root of a domain), change
+the patterns in `wrangler.jsonc`, and deploy. For a subdomain of its own,
+a custom domain is simpler than routes:
 
 ```jsonc
 "routes": [{ "pattern": "uno.example.com", "custom_domain": true }]
 ```
 
-WebSockets work over the custom domain with no extra configuration.
+WebSockets work either way with no extra configuration.
 
 ---
 

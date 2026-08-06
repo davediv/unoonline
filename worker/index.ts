@@ -7,9 +7,14 @@
  *   GET  /ws?room=CODE     upgrade to that room's Durable Object
  *
  * Single origin, so there is no CORS anywhere in this project.
+ *
+ * Those paths are written as if the app owned the whole domain. It does not —
+ * it is mounted at /uno (see shared/base.ts) — so the mount point comes off
+ * the front of every request before anything below looks at it.
  */
 
 import { Room } from './room';
+import { stripBase, withBase } from '../shared/base';
 import { makeRoomCode, normalizeRoomCode } from '../shared/room';
 import { cryptoRng } from '../shared/rng';
 
@@ -27,26 +32,44 @@ const json = (body: unknown, status = 200): Response =>
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const path = stripBase(url.pathname);
 
-    if (url.pathname === '/ws') {
+    // Reached outside the mount point — the workers.dev preview URL, or a bare
+    // /unosomething. The app only exists under /uno, so send them there.
+    if (path === null) {
+      return Response.redirect(`${url.origin}${withBase(url.pathname)}${url.search}`, 302);
+    }
+
+    if (path === '/ws') {
       return handleSocket(request, env, url);
     }
 
-    if (url.pathname === '/api/rooms' && request.method === 'POST') {
+    if (path === '/api/rooms' && request.method === 'POST') {
       return createRoom(env);
     }
 
-    const lookup = url.pathname.match(/^\/api\/rooms\/([^/]+)$/);
+    const lookup = path.match(/^\/api\/rooms\/([^/]+)$/);
     if (lookup && request.method === 'GET') {
       return roomInfo(env, decodeURIComponent(lookup[1]));
     }
 
-    if (url.pathname.startsWith('/api/')) {
+    if (path.startsWith('/api/')) {
       return json({ error: 'not_found', message: 'No such endpoint.' }, 404);
     }
 
-    // Anything else is a static asset, served by the Assets binding.
-    return new Response('Not found', { status: 404 });
+    // Anything else is the client, and the two halves of its life differ.
+    //
+    // Deployed, the Assets binding holds the built files at the root of its own
+    // manifest (/assets/…), so it is asked for the stripped path — and answers
+    // an unknown one with index.html, which is how /uno/r/CODE survives a
+    // refresh. In `npm run dev` the binding is the Vite dev server, which
+    // already serves everything under `base` and redirects what is not, so the
+    // request goes through exactly as it arrived.
+    if (import.meta.env.DEV) {
+      return env.ASSETS.fetch(request);
+    }
+    const assetUrl = new URL(path + url.search, url.origin);
+    return env.ASSETS.fetch(new Request(assetUrl, request));
   },
 } satisfies ExportedHandler<Env>;
 

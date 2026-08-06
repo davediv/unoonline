@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CardFace } from '../components/Card';
 import { Avatar } from '../components/Avatar';
+import { withBase } from '../../shared/base';
 import { AVATAR_COUNT, CODE_ALPHABET, CODE_LENGTH, normalizeRoomCode, randomNickname } from '../../shared/room';
 import { cryptoRng } from '../../shared/rng';
 import type { Card } from '../../shared/types';
@@ -52,7 +53,7 @@ export function Landing({ onEnter, notice }: LandingProps) {
     setProblem(null);
     setBusy('create');
     try {
-      const response = await fetch('/api/rooms', { method: 'POST' });
+      const response = await fetch(withBase('/api/rooms'), { method: 'POST' });
       if (!response.ok) throw new Error('create failed');
       const body = (await response.json()) as { code?: string };
       if (!body.code) throw new Error('no code');
@@ -75,7 +76,7 @@ export function Landing({ onEnter, notice }: LandingProps) {
     setProblem(null);
     setBusy('join');
     try {
-      const response = await fetch(`/api/rooms/${clean}`);
+      const response = await fetch(withBase(`/api/rooms/${clean}`));
       const info = (await response.json()) as { exists: boolean };
       if (!info.exists) {
         setProblem('No room with that code. Check the letters and try again.');

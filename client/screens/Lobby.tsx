@@ -8,6 +8,7 @@
 import { motion } from 'framer-motion';
 import { Avatar } from '../components/Avatar';
 import { CardBack } from '../components/Card';
+import { withBase } from '../../shared/base';
 import type { BotLevel, PublicRoom, RuleSet, TurnTimer } from '../../shared/types';
 import type { ClientMessage } from '../../shared/protocol';
 import { MAX_PLAYERS } from '../../shared/engine';
@@ -48,7 +49,7 @@ export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
   const isHost = youId !== null && room.hostId === youId;
   const you = room.players.find((player) => player.id === youId);
   const humans = room.players.filter((player) => !player.isBot);
-  const link = `${location.origin}/r/${room.code}`;
+  const link = `${location.origin}${withBase(`/r/${room.code}`)}`;
   const enough = room.players.length >= 2;
   const everyoneReady = room.players.every((player) => player.isBot || player.ready);
 

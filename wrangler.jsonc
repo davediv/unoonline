@@ -6,9 +6,29 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "uno",
+	"name": "unoonline",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-08-05",
+
+	/**
+	 * The game is mounted at parebaik.com/uno, because parebaik.com/* is a
+	 * different Worker. The more specific pattern wins, so these two take the
+	 * /uno paths and everything else stays with the home Worker.
+	 *
+	 * Both patterns are needed: `/uno/*` does not match a bare `/uno`.
+	 * The prefix itself lives in shared/base.ts.
+	 */
+	"routes": [
+		{ "pattern": "parebaik.com/uno", "zone_name": "parebaik.com" },
+		{ "pattern": "parebaik.com/uno/*", "zone_name": "parebaik.com" }
+	],
+
+	/**
+	 * Kept on as a preview URL. Naming any route turns this off by default,
+	 * and unoonline.davdiv.workers.dev is worth having when the domain is
+	 * being changed around. It redirects to /uno/ like everything else.
+	 */
+	"workers_dev": true,
 
 	/**
 	 * No `nodejs_compat` flag: the Worker, the Durable Object and the shared
@@ -19,7 +39,15 @@
 	"assets": {
 		// `directory` is filled in by the Vite plugin when it writes the
 		// deployment config during `vite build`.
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+
+		/**
+		 * The Worker runs first and serves the assets itself, because the
+		 * manifest is rooted (/assets/...) while the requests arrive prefixed
+		 * (/uno/assets/...) — only the Worker knows how to bridge that.
+		 */
+		"binding": "ASSETS",
+		"run_worker_first": true
 	},
 
 	/** One Durable Object instance per room — the DO *is* the game. */
