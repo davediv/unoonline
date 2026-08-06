@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { withBase } from '../../shared/base';
 import type { GameEvent, PublicRoom } from '../../shared/types';
 import type { ChatMessage, ClientMessage, ServerMessage } from '../../shared/protocol';
 import { clearToken, loadToken, saveToken } from './prefs';
@@ -112,7 +113,7 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
       if (token) params.set('token', token);
 
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(`${protocol}//${location.host}/ws?${params}`);
+      const socket = new WebSocket(`${protocol}//${location.host}${withBase('/ws')}?${params}`);
       socketRef.current = socket;
 
       socket.onopen = () => {

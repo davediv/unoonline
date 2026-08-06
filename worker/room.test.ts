@@ -1,9 +1,12 @@
 import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
+import { BASE_PATH } from '../shared/base';
 import type { PublicRoom } from '../shared/types';
 import type { ClientMessage, ServerMessage } from '../shared/protocol';
 
-const ORIGIN = 'https://uno.test';
+/** The app is mounted at a sub-path, so the tests knock on the real door. */
+const HOST = 'https://uno.test';
+const ORIGIN = `${HOST}${BASE_PATH}`;
 
 async function createRoom(): Promise<string> {
   const response = await SELF.fetch(`${ORIGIN}/api/rooms`, { method: 'POST' });
@@ -134,6 +137,18 @@ describe('the room API', () => {
   it('404s unknown API routes and refuses a non-upgrade on /ws', async () => {
     expect((await SELF.fetch(`${ORIGIN}/api/nonsense`)).status).toBe(404);
     expect((await SELF.fetch(`${ORIGIN}/ws?room=ABCDEF`)).status).toBe(426);
+  });
+
+  it('sends anything outside the mount point back to it', async () => {
+    // parebaik.com/* is a different Worker; only /uno is ours. A request that
+    // arrives without the prefix — the workers.dev preview, an old bookmark —
+    // is pointed at the same path under /uno rather than answered.
+    const response = await SELF.fetch(`${HOST}/api/rooms`, {
+      method: 'POST',
+      redirect: 'manual',
+    });
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe(`${HOST}${BASE_PATH}/api/rooms`);
   });
 });
 

@@ -15,11 +15,14 @@ import { PrefsContext } from './lib/prefsContext';
 import { loadPrefs, savePrefs, type Prefs } from './lib/prefs';
 import { useRoom } from './lib/useRoom';
 import { setMuted, unlockAudio } from './lib/sound';
+import { BASE_URL, stripBase, withBase } from '../shared/base';
 import { normalizeRoomCode, randomNickname } from '../shared/room';
 import { cryptoRng } from '../shared/rng';
 
 function codeFromPath(): string | null {
-  const match = location.pathname.match(/^\/r\/([^/]+)\/?$/);
+  // The app is served under /uno, so that comes off before the route is read.
+  const path = stripBase(location.pathname);
+  const match = path?.match(/^\/r\/([^/]+)\/?$/);
   return match ? normalizeRoomCode(match[1]) : null;
 }
 
@@ -59,12 +62,12 @@ export default function App() {
 
   const enterRoom = useCallback((next: string) => {
     setNotice(null);
-    history.pushState({}, '', `/r/${next}`);
+    history.pushState({}, '', withBase(`/r/${next}`));
     setCode(next);
   }, []);
 
   const leaveRoom = useCallback((message?: string) => {
-    history.pushState({}, '', '/');
+    history.pushState({}, '', BASE_URL);
     setCode(null);
     setNotice(message ?? null);
   }, []);
