@@ -6,9 +6,11 @@
  * On a phone the fans collapse to avatar chips.
  */
 
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Avatar } from './Avatar';
 import { CardBack } from './Card';
+import { useTicker } from '../lib/hooks';
 import type { PublicPlayer, PublicRoom } from '../../shared/types';
 
 const RING_RADIUS = 21;
@@ -17,13 +19,19 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 interface OpponentsProps {
   room: PublicRoom;
   youId: string | null;
-  /** Server-aligned now, for the turn clock. */
-  now: number;
+  /** Server clock minus the browser clock. */
+  clockSkew: number;
   compact: boolean;
   registerSeat: (playerId: string, element: HTMLElement | null) => void;
 }
 
-export function Opponents({ room, youId, now, compact, registerSeat }: OpponentsProps) {
+export const Opponents = memo(function Opponents({
+  room,
+  youId,
+  clockSkew,
+  compact,
+  registerSeat,
+}: OpponentsProps) {
   // Seat order, starting from the player after you, so the table reads round.
   const youIndex = room.players.findIndex((player) => player.id === youId);
   const start = youIndex >= 0 ? youIndex : 0;
@@ -54,7 +62,7 @@ export function Opponents({ room, youId, now, compact, registerSeat }: Opponents
             player={player}
             room={room}
             isActor={player.id === actorId}
-            now={now}
+            clockSkew={clockSkew}
             compact={compact}
             lift={lift}
             registerSeat={registerSeat}
@@ -63,13 +71,13 @@ export function Opponents({ room, youId, now, compact, registerSeat }: Opponents
       })}
     </div>
   );
-}
+});
 
 function Seat({
   player,
   room,
   isActor,
-  now,
+  clockSkew,
   compact,
   lift,
   registerSeat,
@@ -77,15 +85,11 @@ function Seat({
   player: PublicPlayer;
   room: PublicRoom;
   isActor: boolean;
-  now: number;
+  clockSkew: number;
   compact: boolean;
   lift: number;
   registerSeat: (playerId: string, element: HTMLElement | null) => void;
 }) {
-  const timed = isActor && room.turnDeadline !== null && room.rules.turnTimer > 0;
-  const remaining = timed ? Math.max(0, (room.turnDeadline as number) - now) : 0;
-  const fraction = timed ? Math.min(1, remaining / (room.rules.turnTimer * 1000)) : 0;
-  const urgent = timed && remaining < 5000;
   const onUno = room.uno?.playerId === player.id;
 
   // Five is enough to read as a hand; more just merges into the next seat.
@@ -121,27 +125,11 @@ function Seat({
 
         {/* Turn ring, and the clock drawn around it. */}
         {isActor && (
-          <svg
-            viewBox="0 0 48 48"
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            aria-hidden="true"
-          >
-            <circle cx="24" cy="24" r={RING_RADIUS} fill="none" stroke="var(--live)" strokeWidth="3" opacity="0.9" />
-            {timed && (
-              <circle
-                cx="24"
-                cy="24"
-                r={RING_RADIUS}
-                fill="none"
-                stroke={urgent ? '#e4322b' : '#f2f4f7'}
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={RING_LENGTH}
-                strokeDashoffset={RING_LENGTH * (1 - fraction)}
-                transform="rotate(-90 24 24)"
-              />
-            )}
-          </svg>
+          <TurnRing
+            deadline={room.turnDeadline}
+            durationSeconds={room.rules.turnTimer}
+            clockSkew={clockSkew}
+          />
         )}
 
         {/* Card count, always a number rather than a guess at the fan. */}
@@ -178,5 +166,54 @@ function Seat({
         </span>
       </div>
     </motion.div>
+  );
+}
+
+/** Only this tiny SVG updates every 100ms; the seats and card fans stay put. */
+function TurnRing({
+  deadline,
+  durationSeconds,
+  clockSkew,
+}: {
+  deadline: number | null;
+  durationSeconds: number;
+  clockSkew: number;
+}) {
+  const timed = deadline !== null && durationSeconds > 0;
+  const now = useTicker(timed, 100) + clockSkew;
+  const remaining = timed ? Math.max(0, deadline - now) : 0;
+  const fraction = timed ? Math.min(1, remaining / (durationSeconds * 1000)) : 0;
+  const urgent = timed && remaining < 5000;
+
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      aria-hidden="true"
+    >
+      <circle
+        cx="24"
+        cy="24"
+        r={RING_RADIUS}
+        fill="none"
+        stroke="var(--live)"
+        strokeWidth="3"
+        opacity="0.9"
+      />
+      {timed && (
+        <circle
+          cx="24"
+          cy="24"
+          r={RING_RADIUS}
+          fill="none"
+          stroke={urgent ? '#e4322b' : '#f2f4f7'}
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={RING_LENGTH}
+          strokeDashoffset={RING_LENGTH * (1 - fraction)}
+          transform="rotate(-90 24 24)"
+        />
+      )}
+    </svg>
   );
 }

@@ -12,6 +12,7 @@
  * a deck at a glance.
  */
 
+import { memo } from 'react';
 import type { Card, Color } from '../../shared/types';
 import { cardLabel } from '../../shared/deck';
 import { CARD_COLORS, CARD_COLORS_DEEP } from '../lib/colors';
@@ -242,7 +243,11 @@ function shadeOf(card: Card): string {
   return card.color ? CARD_COLORS_DEEP[card.color] : WILD_FIELD_DEEP;
 }
 
-export function CardFace({ card, colorblind = false, className }: CardFaceProps) {
+export const CardFace = memo(function CardFace({
+  card,
+  colorblind = false,
+  className,
+}: CardFaceProps) {
   const field = fieldOf(card);
   const ink = field;
   const isWild = card.kind === 'wild' || card.kind === 'wild4';
@@ -280,10 +285,21 @@ export function CardFace({ card, colorblind = false, className }: CardFaceProps)
       )}
     </svg>
   );
+}, sameCardFace);
+
+function sameCardFace(previous: CardFaceProps, next: CardFaceProps): boolean {
+  return (
+    previous.card.id === next.card.id &&
+    previous.card.kind === next.card.kind &&
+    previous.card.color === next.card.color &&
+    previous.card.digit === next.card.digit &&
+    previous.colorblind === next.colorblind &&
+    previous.className === next.className
+  );
 }
 
 /** The back of a card: what you see of everyone else's hand. */
-export function CardBack({ className }: { className?: string }) {
+export const CardBack = memo(function CardBack({ className }: { className?: string }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className={className} role="presentation" aria-hidden="true" focusable="false">
       <rect x={0} y={0} width={W} height={H} rx={11} fill="#ffffff" />
@@ -309,4 +325,4 @@ export function CardBack({ className }: { className?: string }) {
       </g>
     </svg>
   );
-}
+});

@@ -59,6 +59,8 @@ interface SessionMeta {
   playerId: string | null;
   token: string;
   spectator: boolean;
+  /** Wire format supported by this browser; absent attachments are v1. */
+  protocol?: 1 | 2;
 }
 
 type TimerKind = 'turn' | 'uno' | 'bot' | 'botCatch' | 'grace' | 'cleanup';
@@ -219,12 +221,13 @@ export class Room extends DurableObject<Env> {
    * seat, somebody new taking one, or a spectator.
    */
   private resolveSeat(state: RoomState, url: URL): { meta: SessionMeta; reclaimed: boolean } {
+    const protocol = url.searchParams.get('v') === '2' ? 2 : 1;
     // A returning player replays the token they stashed in sessionStorage.
     const token = url.searchParams.get('token');
     if (token) {
       const playerId = this.tokens[token];
       if (playerId && findPlayer(state, playerId)) {
-        return { meta: { playerId, token, spectator: false }, reclaimed: true };
+        return { meta: { playerId, token, spectator: false, protocol }, reclaimed: true };
       }
     }
 
@@ -233,7 +236,7 @@ export class Room extends DurableObject<Env> {
     if (wantsToWatch || !canSeat) {
       // Anyone arriving mid-game watches, with every hand hidden.
       return {
-        meta: { playerId: null, token: crypto.randomUUID(), spectator: true },
+        meta: { playerId: null, token: crypto.randomUUID(), spectator: true, protocol },
         reclaimed: false,
       };
     }
@@ -251,7 +254,7 @@ export class Room extends DurableObject<Env> {
     const fresh = crypto.randomUUID();
     seatPlayer(state, { id, name, avatar });
     this.tokens[fresh] = id;
-    return { meta: { playerId: id, token: fresh, spectator: false }, reclaimed: false };
+    return { meta: { playerId: id, token: fresh, spectator: false, protocol }, reclaimed: false };
   }
 
   override async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
@@ -287,7 +290,7 @@ export class Room extends DurableObject<Env> {
 
     if (message.t === 'chat' || message.t === 'emote') {
       const entry = this.buildChat(meta, message, now);
-      if (entry) await this.commit([], now, [entry]);
+      if (entry) await this.commitChat(entry, now);
       return;
     }
 
@@ -745,13 +748,39 @@ export class Room extends DurableObject<Env> {
    * ---------------------------------------------------------------- */
 
   /** Storage first, then everyone hears about it. */
-  private async commit(events: GameEvent[], now: number, extraChat: ChatMessage[] = []): Promise<void> {
-    const lines = [...extraChat, ...this.narrate(events, now)];
+  private async commit(events: GameEvent[], now: number): Promise<void> {
+    const lines = this.narrate(events, now);
     for (const line of lines) this.pushChat(line);
     this.schedule(now);
     await this.persist();
     await this.armAlarm();
     this.sendSync(events, lines, now);
+  }
+
+  /** Chat changes no game state or deadline, so it needs neither a room
+   * projection nor another alarm write for clients on the compact protocol. */
+  private async commitChat(entry: ChatMessage, now: number): Promise<void> {
+    this.pushChat(entry);
+    await this.persist();
+
+    const state = this.room;
+    if (!state) return;
+    for (const socket of this.ctx.getWebSockets()) {
+      const meta = this.metaOf(socket);
+      if (!meta) continue;
+      if (meta.protocol === 2) {
+        this.send(socket, { t: 'chat', messages: [entry] });
+      } else {
+        // Browsers that were already open during a deployment still receive
+        // the v1 frame shape they understand.
+        this.send(socket, {
+          t: 'sync',
+          room: serializeFor(state, meta.playerId, now),
+          events: [],
+          chat: [entry],
+        });
+      }
+    }
   }
 
   private async persist(): Promise<void> {

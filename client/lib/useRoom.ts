@@ -107,6 +107,7 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
         room: options.code,
         name: options.name,
         avatar: String(options.avatar),
+        v: '2',
       });
       if (options.spectate) params.set('spectate', '1');
       const token = loadToken(options.code);
@@ -152,6 +153,12 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
             if (message.events.length > 0) {
               seqRef.current += 1;
               setPulse({ seq: seqRef.current, events: message.events });
+            }
+            break;
+
+          case 'chat':
+            if (message.messages.length > 0) {
+              setChat((previous) => [...previous, ...message.messages].slice(-CHAT_LIMIT));
             }
             break;
 

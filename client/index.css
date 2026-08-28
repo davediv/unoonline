@@ -95,13 +95,31 @@ body {
   transition: background 380ms var(--ease-snap);
 }
 
-/* Cards sit on the felt, so they cast a real shadow rather than a glow. */
+/* Box shadows stay on the compositor while cards move; SVG drop-shadow
+   filters force a much more expensive paint of every card on each frame. */
 .card-shadow {
-  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.55));
+  box-shadow: 0 6px 10px rgb(0 0 0 / 0.55);
 }
 
 .card-shadow-lift {
-  filter: drop-shadow(0 14px 22px rgb(0 0 0 / 0.6));
+  box-shadow: 0 14px 22px rgb(0 0 0 / 0.6);
+}
+
+.card-shadow-live {
+  box-shadow:
+    0 14px 22px rgb(0 0 0 / 0.6),
+    0 0 12px color-mix(in oklab, var(--live) 45%, transparent);
+}
+
+@keyframes hero-deal {
+  from {
+    opacity: 0;
+    transform: translateY(60px) rotate(0deg);
+  }
+}
+
+.hero-card {
+  animation: hero-deal 380ms var(--ease-snap) both;
 }
 
 /* The hand on a narrow screen becomes a snap strip you can thumb through. */
@@ -162,5 +180,9 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .hero-card {
+    animation: none;
   }
 }

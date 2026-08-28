@@ -6,7 +6,7 @@
  * history as everyone else.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Avatar } from './Avatar';
 import type { ChatMessage } from '../../shared/protocol';
@@ -21,7 +21,7 @@ interface ChatProps {
   onEmote: (index: number) => void;
 }
 
-export function Chat({ messages, open, canTalk, onClose, onSend, onEmote }: ChatProps) {
+export const Chat = memo(function Chat({ messages, open, canTalk, onClose, onSend, onEmote }: ChatProps) {
   const [draft, setDraft] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -124,4 +124,4 @@ export function Chat({ messages, open, canTalk, onClose, onSend, onEmote }: Chat
       )}
     </AnimatePresence>
   );
-}
+});

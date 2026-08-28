@@ -6,7 +6,7 @@
  * events that came with the snapshot drive sound and the card flights.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CardBack } from '../components/Card';
 import { CARD_COLORS } from '../lib/colors';
@@ -46,6 +46,7 @@ interface Flight {
 }
 
 let flightId = 0;
+const ignoreElementRef = () => {};
 
 export function Table({
   room,
@@ -63,7 +64,6 @@ export function Table({
   const reduced = useReducedMotion();
   const compact = !useMediaQuery('(min-width: 640px)');
 
-  const [selectedRaw, setSelected] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [seenChat, setSeenChat] = useState(0);
   const [reveal, setReveal] = useState<{ name: string; hand: Card[] } | null>(null);
@@ -80,14 +80,8 @@ export function Table({
     () => (prefs.sortHand ? sortHand(hand) : hand),
     [hand, prefs.sortHand],
   );
-  // Clamped here rather than in an effect, so it can never point past the end.
-  const selected = Math.min(selectedRaw, Math.max(0, ordered.length - 1));
   const moves = room.moves;
   const live = room.activeColor ? CARD_COLORS[room.activeColor] : '#5b6472';
-
-  const timing = room.turnDeadline !== null;
-  const tick = useTicker(timing, 100);
-  const now = tick + clockSkew;
 
   const onTurn = you !== null && room.players[room.turn]?.id === youId;
   const owed = room.drawStack?.count ?? 0;
@@ -237,6 +231,34 @@ export function Table({
     void card;
   }, []);
 
+  const draw = useCallback(() => act({ t: 'intent', intent: { type: 'DRAW' } }), [act]);
+  const pass = useCallback(() => act({ t: 'intent', intent: { type: 'PASS' } }), [act]);
+  const challenge = useCallback(
+    () => act({ t: 'intent', intent: { type: 'CHALLENGE' } }),
+    [act],
+  );
+  const callUno = useCallback(
+    () => act({ t: 'intent', intent: { type: 'CALL_UNO' } }),
+    [act],
+  );
+  const catchUno = useCallback(
+    (targetId: string) => act({ t: 'intent', intent: { type: 'CATCH_UNO', targetId } }),
+    [act],
+  );
+  const registerSeat = useCallback((id: string, element: HTMLElement | null) => {
+    if (element) seatEls.current.set(id, element);
+    else seatEls.current.delete(id);
+  }, []);
+  const registerDeck = useCallback((element: HTMLElement | null) => {
+    deckEl.current = element;
+  }, []);
+  const finishFlight = useCallback((id: number) => {
+    setFlights((current) => current.filter((flight) => flight.id !== id));
+  }, []);
+  const closeChat = useCallback(() => setChatVisible(false), [setChatVisible]);
+  const sendChat = useCallback((text: string) => act({ t: 'chat', text }), [act]);
+  const sendEmote = useCallback((index: number) => act({ t: 'emote', index }), [act]);
+
   /* ---------------------------------------------------------------- *
    * Keyboard play
    * ---------------------------------------------------------------- */
@@ -252,42 +274,25 @@ export function Table({
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       switch (event.key) {
-        case 'ArrowRight':
-          event.preventDefault();
-          setSelected((current) => Math.min(ordered.length - 1, current + 1));
-          break;
-        case 'ArrowLeft':
-          event.preventDefault();
-          setSelected((current) => Math.max(0, current - 1));
-          break;
-        case 'Enter':
-        case ' ': {
-          const card = ordered[selected];
-          if (!card) return;
-          event.preventDefault();
-          if (moves.playable.includes(card.id) || moves.jumpIn.includes(card.id)) playCard(card.id);
-          else refuse(card);
-          break;
-        }
         case 'd':
         case 'D':
           if (moves.canDraw) {
             event.preventDefault();
-            act({ t: 'intent', intent: { type: 'DRAW' } });
+            draw();
           }
           break;
         case 'u':
         case 'U':
           if (moves.canCallUno) {
             event.preventDefault();
-            act({ t: 'intent', intent: { type: 'CALL_UNO' } });
+            callUno();
           }
           break;
         case 'c':
         case 'C':
           if (moves.catchTargetId) {
             event.preventDefault();
-            act({ t: 'intent', intent: { type: 'CATCH_UNO', targetId: moves.catchTargetId } });
+            catchUno(moves.catchTargetId);
           }
           break;
         case 'Escape':
@@ -299,16 +304,13 @@ export function Table({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [ordered, selected, moves, act, playCard, refuse, setChatVisible]);
+  }, [moves, draw, callUno, catchUno, setChatVisible]);
 
   /* ---------------------------------------------------------------- *
    * Render
    * ---------------------------------------------------------------- */
 
   const showScoreboard = room.phase === 'roundOver' || room.phase === 'matchOver';
-  const secondsLeft =
-    room.turnDeadline !== null ? Math.max(0, Math.ceil((room.turnDeadline - now) / 1000)) : null;
-
   return (
     <div
       className={`table-felt relative flex h-dvh w-full flex-col overflow-hidden transition-[padding] duration-200 ${
@@ -379,12 +381,9 @@ export function Table({
         <Opponents
           room={room}
           youId={youId}
-          now={now}
+          clockSkew={clockSkew}
           compact={compact}
-          registerSeat={(id, element) => {
-            if (element) seatEls.current.set(id, element);
-            else seatEls.current.delete(id);
-          }}
+          registerSeat={registerSeat}
         />
       </div>
 
@@ -394,11 +393,9 @@ export function Table({
           room={room}
           colorblind={prefs.colorblind}
           canDraw={moves.canDraw && !spectator}
-          onDraw={() => act({ t: 'intent', intent: { type: 'DRAW' } })}
-          deckRef={(element) => {
-            deckEl.current = element;
-          }}
-          discardRef={() => {}}
+          onDraw={draw}
+          deckRef={registerDeck}
+          discardRef={ignoreElementRef}
         />
 
         <ActionBar
@@ -406,12 +403,13 @@ export function Table({
           onTurn={onTurn}
           owed={owed}
           spectator={spectator}
-          secondsLeft={secondsLeft}
-          onDraw={() => act({ t: 'intent', intent: { type: 'DRAW' } })}
-          onPass={() => act({ t: 'intent', intent: { type: 'PASS' } })}
-          onChallenge={() => act({ t: 'intent', intent: { type: 'CHALLENGE' } })}
-          onUno={() => act({ t: 'intent', intent: { type: 'CALL_UNO' } })}
-          onCatch={(targetId) => act({ t: 'intent', intent: { type: 'CATCH_UNO', targetId } })}
+          turnDeadline={room.turnDeadline}
+          clockSkew={clockSkew}
+          onDraw={draw}
+          onPass={pass}
+          onChallenge={challenge}
+          onUno={callUno}
+          onCatch={catchUno}
         />
       </div>
 
@@ -423,11 +421,9 @@ export function Table({
             cards={ordered}
             playable={moves.playable}
             jumpIn={moves.jumpIn}
-            selected={selected}
             compact={compact}
             colorblind={prefs.colorblind}
             dealing={dealing && !reduced}
-            onSelect={setSelected}
             onPlay={playCard}
             onRefuse={refuse}
           />
@@ -441,7 +437,7 @@ export function Table({
       {/* Cards in the air */}
       <FlightLayer
         flights={flights}
-        onDone={(id) => setFlights((current) => current.filter((flight) => flight.id !== id))}
+        onDone={finishFlight}
       />
 
       <AnimatePresence>
@@ -485,9 +481,9 @@ export function Table({
         messages={chat}
         open={chatOpen}
         canTalk={!spectator}
-        onClose={() => setChatVisible(false)}
-        onSend={(text) => act({ t: 'chat', text })}
-        onEmote={(index) => act({ t: 'emote', index })}
+        onClose={closeChat}
+        onSend={sendChat}
+        onEmote={sendEmote}
       />
     </div>
   );
@@ -519,12 +515,13 @@ function RailButton({
   );
 }
 
-function ActionBar({
+const ActionBar = memo(function ActionBar({
   room,
   onTurn,
   owed,
   spectator,
-  secondsLeft,
+  turnDeadline,
+  clockSkew,
   onDraw,
   onPass,
   onChallenge,
@@ -535,7 +532,8 @@ function ActionBar({
   onTurn: boolean;
   owed: number;
   spectator: boolean;
-  secondsLeft: number | null;
+  turnDeadline: number | null;
+  clockSkew: number;
   onDraw: () => void;
   onPass: () => void;
   onChallenge: () => void;
@@ -604,10 +602,8 @@ function ActionBar({
         )}
       </AnimatePresence>
 
-      {onTurn && secondsLeft !== null && (
-        <span className={`tabular text-sm ${secondsLeft <= 5 ? 'text-uno-red' : 'text-chalk-dim'}`}>
-          {secondsLeft}s
-        </span>
+      {onTurn && turnDeadline !== null && (
+        <TurnCountdown deadline={turnDeadline} clockSkew={clockSkew} />
       )}
 
       {!onTurn && !moves.canCallUno && !moves.catchTargetId && room.phase === 'playing' && (
@@ -616,6 +612,16 @@ function ActionBar({
         </span>
       )}
     </div>
+  );
+});
+
+function TurnCountdown({ deadline, clockSkew }: { deadline: number; clockSkew: number }) {
+  const now = useTicker(true, 250) + clockSkew;
+  const secondsLeft = Math.max(0, Math.ceil((deadline - now) / 1000));
+  return (
+    <span className={`tabular text-sm ${secondsLeft <= 5 ? 'text-uno-red' : 'text-chalk-dim'}`}>
+      {secondsLeft}s
+    </span>
   );
 }
 
