@@ -62,6 +62,8 @@ export type ServerMessage =
    * out before this reaches anyone else.
    */
   | { t: 'sync'; room: PublicRoom; events: GameEvent[]; chat?: ChatMessage[] }
+  /** Chat-only delivery avoids rebuilding and retransmitting an unchanged room. */
+  | { t: 'chat'; messages: ChatMessage[] }
   | { t: 'error'; code: string; message: string; fatal?: boolean }
   | { t: 'pong'; now: number };
 

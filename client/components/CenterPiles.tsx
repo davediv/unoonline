@@ -6,7 +6,7 @@
  * once. A coloured dot would tell you less and look like everything else.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CardBack, CardFace, ColorGlyph } from './Card';
 import type { Card, Color, PublicRoom } from '../../shared/types';
@@ -28,7 +28,7 @@ function tiltOf(id: string): number {
   return ((hash % 17) - 8) * 1.1;
 }
 
-export function CenterPiles({
+export const CenterPiles = memo(function CenterPiles({
   room,
   colorblind,
   canDraw,
@@ -72,7 +72,7 @@ export function CenterPiles({
           <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 opacity-70">
             <CardBack className="w-full" />
           </span>
-          <span className={`relative block ${canDraw ? 'card-shadow-lift' : 'card-shadow'}`}>
+          <span className={`relative block rounded-xl ${canDraw ? 'card-shadow-lift' : 'card-shadow'}`}>
             <CardBack className="w-full" />
           </span>
           {canDraw && (
@@ -104,7 +104,7 @@ export function CenterPiles({
                 animate={{ y: 0, scale: 1, rotate: tiltOf(top.id), opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.32, ease: [0.2, 0.9, 0.24, 1] }}
-                className="card-shadow relative"
+                className="card-shadow relative rounded-xl"
               >
                 <CardFace card={top} colorblind={colorblind} className="w-full" />
               </motion.div>
@@ -132,7 +132,7 @@ export function CenterPiles({
       <DirectionMark direction={room.direction} />
     </div>
   );
-}
+});
 
 function ActiveColor({ color, colorblind }: { color: Color | null; colorblind: boolean }) {
   return (

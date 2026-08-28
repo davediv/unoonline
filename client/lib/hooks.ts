@@ -1,25 +1,57 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
-/**
- * The wall clock, treated as what it is: an external source React subscribes
- * to. One shared value, read straight through `useSyncExternalStore`, and no
- * interval at all while nothing is counting down — so an idle table does not
- * re-render ten times a second.
- */
+/** The wall clock is one shared external store for every visible countdown. */
 let clock = Date.now();
+let timer: number | null = null;
+let timerInterval = Infinity;
+
+interface ClockSubscriber {
+  notify: () => void;
+  intervalMs: number;
+  nextAt: number;
+}
+
+const clockSubscribers = new Map<() => void, ClockSubscriber>();
+
+function scheduleClock(): void {
+  const nextInterval = Math.min(
+    ...Array.from(clockSubscribers.values(), ({ intervalMs }) => intervalMs),
+  );
+  if (timer !== null && nextInterval === timerInterval) return;
+  if (timer !== null) window.clearInterval(timer);
+  timer = null;
+  timerInterval = nextInterval;
+  if (!Number.isFinite(nextInterval)) return;
+
+  clock = Date.now();
+  timer = window.setInterval(() => {
+    clock = Date.now();
+    for (const subscriber of clockSubscribers.values()) {
+      if (clock < subscriber.nextAt) continue;
+      subscriber.nextAt = clock + subscriber.intervalMs;
+      subscriber.notify();
+    }
+  }, nextInterval);
+}
 
 export function useTicker(active: boolean, intervalMs = 100): number {
+  const safeInterval = Math.max(16, intervalMs);
   const subscribe = useCallback(
     (onChange: () => void) => {
       if (!active) return () => undefined;
       clock = Date.now();
-      const id = window.setInterval(() => {
-        clock = Date.now();
-        onChange();
-      }, intervalMs);
-      return () => window.clearInterval(id);
+      clockSubscribers.set(onChange, {
+        notify: onChange,
+        intervalMs: safeInterval,
+        nextAt: clock + safeInterval,
+      });
+      scheduleClock();
+      return () => {
+        clockSubscribers.delete(onChange);
+        scheduleClock();
+      };
     },
-    [active, intervalMs],
+    [active, safeInterval],
   );
 
   const read = () => clock;

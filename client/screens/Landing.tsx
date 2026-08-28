@@ -6,8 +6,7 @@
  * screen is quiet by comparison.
  */
 
-import { useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { memo, useState } from 'react';
 import { CardFace } from '../components/Card';
 import { Avatar } from '../components/Avatar';
 import { withBase } from '../../shared/base';
@@ -27,12 +26,12 @@ const HERO: Card[] = [
 
 interface LandingProps {
   onEnter: (code: string) => void;
+  onPrepareRoom: () => void;
   notice?: string | null;
 }
 
-export function Landing({ onEnter, notice }: LandingProps) {
+export function Landing({ onEnter, onPrepareRoom, notice }: LandingProps) {
   const { prefs, update } = usePrefs();
-  const reduced = useReducedMotion();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
   const [problem, setProblem] = useState<string | null>(notice ?? null);
@@ -49,6 +48,7 @@ export function Landing({ onEnter, notice }: LandingProps) {
 
   const createRoom = async () => {
     unlockAudio();
+    onPrepareRoom();
     ensureName();
     setProblem(null);
     setBusy('create');
@@ -72,6 +72,7 @@ export function Landing({ onEnter, notice }: LandingProps) {
       setProblem(`A room code is ${CODE_LENGTH} letters and numbers.`);
       return;
     }
+    onPrepareRoom();
     ensureName();
     setProblem(null);
     setBusy('join');
@@ -95,32 +96,7 @@ export function Landing({ onEnter, notice }: LandingProps) {
     <main className="table-felt min-h-full w-full overflow-x-hidden">
       <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center justify-center gap-8 px-5 py-10">
         {/* The fan: the same card components used in the game. */}
-        <div className="flex h-40 w-full items-center justify-center sm:h-52" aria-hidden="true">
-          {HERO.map((card, index) => {
-            const middle = (HERO.length - 1) / 2;
-            const offset = index - middle;
-            return (
-              <motion.div
-                key={card.id}
-                className="card-shadow -mx-4 w-20 sm:-mx-3 sm:w-24"
-                initial={reduced ? false : { y: 60, opacity: 0, rotate: 0 }}
-                animate={{
-                  y: Math.abs(offset) * 9,
-                  opacity: 1,
-                  rotate: offset * 9,
-                }}
-                transition={{
-                  delay: reduced ? 0 : 0.06 * index,
-                  duration: 0.38,
-                  ease: [0.2, 0.9, 0.24, 1],
-                }}
-                style={{ zIndex: HERO.length - Math.abs(offset) }}
-              >
-                <CardFace card={card} colorblind={prefs.colorblind} className="w-full" />
-              </motion.div>
-            );
-          })}
-        </div>
+        <Hero colorblind={prefs.colorblind} />
 
         <header className="text-center">
           <h1 className="display text-6xl leading-none sm:text-7xl">UNO</h1>
@@ -248,3 +224,28 @@ export function Landing({ onEnter, notice }: LandingProps) {
     </main>
   );
 }
+
+/** The decorative cards do not need to reconcile on every nickname keystroke. */
+const Hero = memo(function Hero({ colorblind }: { colorblind: boolean }) {
+  return (
+    <div className="flex h-40 w-full items-center justify-center sm:h-52" aria-hidden="true">
+      {HERO.map((card, index) => {
+        const middle = (HERO.length - 1) / 2;
+        const offset = index - middle;
+        return (
+          <div
+            key={card.id}
+            className="hero-card card-shadow -mx-4 w-20 rounded-xl sm:-mx-3 sm:w-24"
+            style={{
+              zIndex: HERO.length - Math.abs(offset),
+              animationDelay: `${0.06 * index}s`,
+              transform: `translateY(${Math.abs(offset) * 9}px) rotate(${offset * 9}deg)`,
+            }}
+          >
+            <CardFace card={card} colorblind={colorblind} className="w-full" />
+          </div>
+        );
+      })}
+    </div>
+  );
+});

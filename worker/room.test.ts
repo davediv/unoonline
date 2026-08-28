@@ -30,7 +30,7 @@ class Client {
   }
 
   static async open(code: string, query: Record<string, string> = {}): Promise<Client> {
-    const params = new URLSearchParams({ room: code, ...query });
+    const params = new URLSearchParams({ room: code, v: '2', ...query });
     const response = await SELF.fetch(`${ORIGIN}/ws?${params}`, {
       headers: { Upgrade: 'websocket' },
     });
@@ -391,10 +391,11 @@ describe('chat', () => {
     await guest.welcome();
 
     host.send({ t: 'chat', text: 'anyone got a blue?' });
-    await guest.waitFor(
-      (m) => m.t === 'sync' && (m.chat ?? []).some((c) => c.text === 'anyone got a blue?'),
+    const update = await guest.waitFor<Extract<ServerMessage, { t: 'chat' }>>(
+      (m) => m.t === 'chat' && m.messages.some((c) => c.text === 'anyone got a blue?'),
       'the chat line',
     );
+    expect(update).not.toHaveProperty('room');
 
     const latecomer = await Client.open(code, { name: 'Ann' });
     const welcome = await latecomer.welcome();
@@ -419,12 +420,25 @@ describe('chat', () => {
 
     host.send({ t: 'chat', text: '   ' });
     host.send({ t: 'chat', text: 'x'.repeat(400) });
-    const sync = await host.waitFor(
-      (m) => m.t === 'sync' && (m.chat ?? []).some((c) => c.kind === 'chat'),
+    const update = await host.waitFor<Extract<ServerMessage, { t: 'chat' }>>(
+      (m) => m.t === 'chat' && m.messages.some((c) => c.kind === 'chat'),
       'the long message',
     );
-    const line = sync.t === 'sync' ? (sync.chat ?? []).find((c) => c.kind === 'chat') : undefined;
+    const line = update.messages.find((c) => c.kind === 'chat');
     expect(line?.text).toHaveLength(160);
-    expect(host.messages.filter((m) => m.t === 'sync' && (m.chat ?? []).some((c) => c.kind === 'chat'))).toHaveLength(1);
+    expect(host.messages.filter((m) => m.t === 'chat' && m.messages.some((c) => c.kind === 'chat'))).toHaveLength(1);
+  });
+
+  it('keeps the full sync shape for browsers already open during a deploy', async () => {
+    const code = await createRoom();
+    const legacy = await Client.open(code, { name: 'Maya', v: '1' });
+    await legacy.welcome();
+
+    legacy.send({ t: 'chat', text: 'still here' });
+    const update = await legacy.waitFor<Extract<ServerMessage, { t: 'sync' }>>(
+      (m) => m.t === 'sync' && (m.chat ?? []).some((c) => c.text === 'still here'),
+      'the legacy chat frame',
+    );
+    expect(update.room.code).toBe(code);
   });
 });
