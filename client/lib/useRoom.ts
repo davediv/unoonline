@@ -202,7 +202,16 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
       };
     };
 
-    connect();
+    // Strict Mode mounts effects once, immediately cleans them up, then mounts
+    // them again in development. Opening the socket synchronously lets the
+    // discarded pass reach the room before it can receive and persist its
+    // reconnection token, which creates a second seat on the real pass. A
+    // cancellable task keeps that probe side-effect-free without delaying a
+    // normal mount beyond the next event-loop turn.
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      connect();
+    }, 0);
     return () => {
       stoppedRef.current = true;
       cleanup();
