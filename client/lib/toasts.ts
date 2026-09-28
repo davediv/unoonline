@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 /**
  * Every failure the server can return has a sentence written for it here, in
@@ -49,13 +49,15 @@ export function toastText(code: string, fallback: string): string {
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const push = (text: string, tone: Toast['tone'] = 'warn') => {
+  // Stable, because each toast's expiry timer depends on `dismiss`: a new one
+  // every render would restart the timer on every frame the room sends.
+  const push = useCallback((text: string, tone: Toast['tone'] = 'warn') => {
     setToasts((current) => [...current, { id: Date.now() + Math.random(), text, tone }].slice(-3));
-  };
+  }, []);
 
-  const dismiss = (id: number) => {
+  const dismiss = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
-  };
+  }, []);
 
   return { toasts, push, dismiss };
 }
