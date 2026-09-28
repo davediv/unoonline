@@ -5,21 +5,22 @@
  * people, so it has to survive a cold page load and a refresh.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Landing } from './screens/Landing';
 import { PrefsContext } from './lib/prefsContext';
 import { loadPrefs, savePrefs, type Prefs } from './lib/prefs';
+import { preloadable } from './lib/preloadable';
 import { setMuted, unlockAudio } from './lib/sound';
 import { BASE_URL, stripBase, withBase } from '../shared/base';
 import { normalizeRoomCode } from '../shared/room';
 
-const loadRoomShell = () => import('./RoomShell');
-const RoomShell = lazy(loadRoomShell);
+const roomShell = preloadable(() => import('./RoomShell').then((module) => module.default));
+const RoomShell = roomShell.Component;
 
 /** Start room-only code while the create/join request is already in flight. */
 function prepareRoom(): void {
   void Promise.all([
-    loadRoomShell(),
+    roomShell.preload(),
     import('./screens/Lobby'),
     import('./screens/Table'),
   ]).catch(() => {
