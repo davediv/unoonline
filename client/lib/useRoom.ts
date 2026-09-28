@@ -38,6 +38,11 @@ export interface JoinOptions {
   name: string;
   avatar: number;
   spectate?: boolean;
+  /**
+   * A room this player is making: the first connection creates it on the way
+   * in, so there is no separate request to wait for first.
+   */
+  create?: boolean;
 }
 
 export interface RoomConnection {
@@ -94,7 +99,9 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
   const seqRef = useRef(0);
   const errorSeqRef = useRef(0);
 
-  const key = options ? `${options.code}|${options.name}|${options.avatar}|${options.spectate}` : '';
+  const key = options
+    ? `${options.code}|${options.name}|${options.avatar}|${options.spectate}|${options.create}`
+    : '';
 
   const stopPinging = useCallback(() => {
     if (pingRef.current !== null) window.clearInterval(pingRef.current);
@@ -128,6 +135,9 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
   useEffect(() => {
     if (!options) return;
     stoppedRef.current = false;
+    // Only until the room has answered once: a reconnect joins what exists,
+    // and never brings back a room that has since been cleaned up.
+    let create = options.create === true;
 
     const connect = () => {
       if (stoppedRef.current) return;
@@ -140,6 +150,7 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
         v: '2',
       });
       if (options.spectate) params.set('spectate', '1');
+      if (create) params.set('create', '1');
       const token = loadToken(options.code);
       if (token) params.set('token', token);
 
@@ -167,6 +178,7 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
             // Only a room that answered counts as back: a socket that opens
             // and drops again keeps backing off rather than retrying at once.
             retryRef.current = 0;
+            create = false;
             saveToken(options.code, message.token);
             setYouId(message.youId);
             setSpectator(message.spectator);

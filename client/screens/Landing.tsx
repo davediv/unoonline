@@ -10,7 +10,14 @@ import { memo, useEffect, useState } from 'react';
 import { CardFace } from '../components/Card';
 import { Avatar } from '../components/Avatar';
 import { withBase } from '../../shared/base';
-import { AVATAR_COUNT, CODE_ALPHABET, CODE_LENGTH, normalizeRoomCode, randomNickname } from '../../shared/room';
+import {
+  AVATAR_COUNT,
+  CODE_ALPHABET,
+  CODE_LENGTH,
+  makeRoomCode,
+  normalizeRoomCode,
+  randomNickname,
+} from '../../shared/room';
 import { cryptoRng } from '../../shared/rng';
 import type { Card } from '../../shared/types';
 import { usePrefs } from '../lib/prefsContext';
@@ -57,7 +64,7 @@ function lookUpRoom(code: string): Promise<RoomInfo> {
 }
 
 interface LandingProps {
-  onEnter: (code: string) => void;
+  onEnter: (code: string, options?: { create?: boolean }) => void;
   onPrepareRoom: () => void;
   notice?: string | null;
 }
@@ -65,7 +72,7 @@ interface LandingProps {
 export function Landing({ onEnter, onPrepareRoom, notice }: LandingProps) {
   const { prefs, update } = usePrefs();
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState<'create' | 'join' | null>(null);
+  const [busy, setBusy] = useState<'join' | null>(null);
   const [problem, setProblem] = useState<string | null>(notice ?? null);
   const [pickingAvatar, setPickingAvatar] = useState(false);
 
@@ -90,23 +97,16 @@ export function Landing({ onEnter, onPrepareRoom, notice }: LandingProps) {
     return generated;
   };
 
-  const createRoom = async () => {
+  // The room is made by the socket that joins it, so there is no request to
+  // wait for here: pick a code and go. The one-in-a-billion code that is
+  // already taken simply joins that room, like typing it in would.
+  const createRoom = () => {
     unlockAudio();
     onPrepareRoom();
     ensureName();
     setProblem(null);
-    setBusy('create');
-    try {
-      const response = await fetch(withBase('/api/rooms'), { method: 'POST' });
-      if (!response.ok) throw new Error('create failed');
-      const body = (await response.json()) as { code?: string };
-      if (!body.code) throw new Error('no code');
-      play('join');
-      onEnter(body.code);
-    } catch {
-      setProblem('Could not make a room just now. Try again in a moment.');
-      setBusy(null);
-    }
+    play('join');
+    onEnter(makeRoomCode(cryptoRng), { create: true });
   };
 
   const joinRoom = async () => {
@@ -206,7 +206,7 @@ export function Landing({ onEnter, onPrepareRoom, notice }: LandingProps) {
             disabled={busy !== null}
             className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white disabled:opacity-50"
           >
-            {busy === 'create' ? 'Making a room…' : 'Create room'}
+            Create room
           </button>
 
           <div className="flex items-center gap-3 text-xs tracking-wide text-chalk-faint uppercase">
