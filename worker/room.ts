@@ -100,6 +100,8 @@ export class Room extends DurableObject<Env> {
   /** Reconnection tokens. Never serialized to a client other than its owner. */
   private tokens: Record<string, string> = {};
   private timers: Timer[] = [];
+  /** The alarm as last written: `undefined` until known, `null` for none. */
+  private alarmAt: number | null | undefined = undefined;
   /** In-memory only: resets on hibernation, which is fine for a flood guard. */
   private rates = new Map<string, { count: number; until: number }>();
 
@@ -526,8 +528,9 @@ export class Room extends DurableObject<Env> {
     const others = this.ctx.getWebSockets(meta.playerId).filter((other) => other !== ws);
     if (others.length > 0) return;
 
+    // Close and error can both report the same drop; the first one counts.
     const player = findPlayer(this.room, meta.playerId);
-    if (!player) return;
+    if (!player || !player.connected) return;
 
     const now = Date.now();
     const events: GameEvent[] = [];
@@ -552,6 +555,8 @@ export class Room extends DurableObject<Env> {
    * ---------------------------------------------------------------- */
 
   override async alarm(): Promise<void> {
+    // A fired alarm is no longer set.
+    this.alarmAt = null;
     const now = Date.now();
     if (!this.room) {
       await this.armAlarm();
@@ -674,6 +679,7 @@ export class Room extends DurableObject<Env> {
     this.rates.clear();
     await this.ctx.storage.deleteAll();
     await this.ctx.storage.deleteAlarm();
+    this.alarmAt = null;
     return true;
   }
 
@@ -692,14 +698,18 @@ export class Room extends DurableObject<Env> {
     );
   }
 
-  /** One alarm, always set to the nearest deadline. */
+  /**
+   * One alarm, always set to the nearest deadline — and written only when that
+   * moves. Most commits change no deadline, and an alarm write is a storage
+   * row like any other.
+   */
   private async armAlarm(): Promise<void> {
-    if (this.timers.length === 0) {
-      await this.ctx.storage.deleteAlarm();
-      return;
-    }
-    const next = this.timers.reduce((min, t) => Math.min(min, t.at), Infinity);
-    await this.ctx.storage.setAlarm(next);
+    const next =
+      this.timers.length === 0 ? null : this.timers.reduce((min, t) => Math.min(min, t.at), Infinity);
+    if (next === this.alarmAt) return;
+    this.alarmAt = next;
+    if (next === null) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(next);
   }
 
   /**

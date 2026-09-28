@@ -290,7 +290,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - The socket now opens 13–23 ms after the click instead of after the POST (20–285 ms locally).
     - In production the POST (median 754 ms) is mostly first-time room creation, which now happens inside the upgrade, so the saving there is the separate POST round trip plus the serial handshake.
 
-- [ ] **PERF-11 — Skip Durable Object writes that change nothing** · Priority: **Low** · Effort: S · Risk: Low
+- [x] **PERF-11 — Skip Durable Object writes that change nothing** · Priority: **Low** · Effort: S · Risk: Low · done 2026-09-29
   - **Issue:**
     - Every commit awaits `storage.put` and then `setAlarm` or `deleteAlarm` before broadcasting (`worker/room.ts:751-758`, `worker/room.ts:683-690`), even when the alarm time is unchanged. In games without a turn timer, nearly every move pays a `deleteAlarm` write.
     - `webSocketClose` and `webSocketError` both call `dropSocket` (`worker/room.ts:500-508`). A single disconnect can therefore commit and broadcast twice.
@@ -302,7 +302,11 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `worker/room.ts`, `worker/room.test.ts`
   - **Depends on:** PERF-10
   - **Measure:** a worker test that spies on `ctx.storage` and counts writes per `PLAY_CARD` and per disconnect, before and after.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:**
+    - New worker test "writes a move once…" (2 players, no turn timer): storage writes per move went from `['put', 'deleteAlarm']` → **`['put']`**, 2 rows → 1. The same test failed on the previous code with exactly that diff.
+    - `dropSocket` now ignores a second report of the same drop (source-level; no double commit or broadcast).
+    - The armed alarm time is cached per instance and reset when an alarm fires or the room is cleaned up. It starts unknown after a restart, so the first commit always writes.
+    - All 24 worker tests pass, including bots moving on alarms.
 
 ## Top 5
 1. PERF-01: remove the 300 ms Suspense hold on room entry and game start (−0.3 to −0.6 s on every create, join, link and start).
