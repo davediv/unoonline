@@ -7,7 +7,7 @@
  * a card will not go is more useful than a dead rectangle.
  */
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CardFace } from './Card';
 import type { Card } from '../../shared/types';
@@ -31,6 +31,15 @@ const MIN_GAP = 26;
 const ARC_DEPTH = 16;
 /** The strip the hand always occupies, so the table above it never shifts. */
 const STRIP = 198;
+/** How long a tapped card waits for the table to answer before settling back. */
+const PENDING_TIMEOUT_MS = 1500;
+
+interface PendingPlay {
+  id: string;
+  /** What the hand looked like when the card was played. */
+  cards: Card[];
+  playable: string[];
+}
 
 export const Hand = memo(function Hand({
   cards,
@@ -48,6 +57,36 @@ export const Hand = memo(function Hand({
   const selected = Math.min(selectedRaw, Math.max(0, cards.length - 1));
   const playableIds = useMemo(() => new Set(playable), [playable]);
   const jumpInIds = useMemo(() => new Set(jumpIn), [jumpIn]);
+
+  // A played card answers the tap at once, before the round trip: it lifts,
+  // dims, and further plays wait. It stays that way until a frame changes the
+  // hand or what is playable (the room keeps both identical otherwise), or,
+  // if the play was refused, until the timeout.
+  const [pending, setPending] = useState<PendingPlay | null>(null);
+  const pendingId =
+    pending && pending.cards === cards && pending.playable === playable ? pending.id : null;
+
+  useEffect(() => {
+    if (!pending) return;
+    const id = window.setTimeout(() => setPending(null), PENDING_TIMEOUT_MS);
+    return () => window.clearTimeout(id);
+  }, [pending]);
+
+  const latest = useRef({ cards, playable, pendingId });
+  useLayoutEffect(() => {
+    latest.current = { cards, playable, pendingId };
+  });
+
+  // Stable, so the memoized cards do not re-render when the hand changes.
+  const playOnce = useCallback(
+    (cardId: string) => {
+      const now = latest.current;
+      if (now.pendingId) return;
+      setPending({ id: cardId, cards: now.cards, playable: now.playable });
+      onPlay(cardId);
+    },
+    [onPlay],
+  );
 
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -94,7 +133,7 @@ export const Hand = memo(function Hand({
           const card = cards[selected];
           if (!card) return;
           event.preventDefault();
-          if (playableIds.has(card.id) || jumpInIds.has(card.id)) onPlay(card.id);
+          if (playableIds.has(card.id) || jumpInIds.has(card.id)) playOnce(card.id);
           else onRefuse(card);
           break;
         }
@@ -103,7 +142,7 @@ export const Hand = memo(function Hand({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cards, jumpInIds, onPlay, onRefuse, playableIds, selected]);
+  }, [cards, jumpInIds, playOnce, onRefuse, playableIds, selected]);
 
   return (
     <div
@@ -136,6 +175,7 @@ export const Hand = memo(function Hand({
             canJump={canJump}
             live={live}
             selected={isSelected}
+            pending={card.id === pendingId}
             compact={compact}
             colorblind={colorblind}
             dealing={dealing}
@@ -144,7 +184,7 @@ export const Hand = memo(function Hand({
             overlap={overlap}
             layoutKey={layoutKey}
             onSelect={setSelected}
-            onPlay={onPlay}
+            onPlay={playOnce}
             onRefuse={onRefuse}
           />
         );
@@ -163,6 +203,8 @@ interface HandCardProps {
   canJump: boolean;
   live: boolean;
   selected: boolean;
+  /** Played, and waiting for the table to answer. */
+  pending: boolean;
   compact: boolean;
   colorblind: boolean;
   dealing: boolean;
@@ -183,6 +225,7 @@ const HandCard = memo(
     canJump,
     live,
     selected,
+    pending,
     compact,
     colorblind,
     dealing,
@@ -200,10 +243,10 @@ const HandCard = memo(
         layoutDependency={`${layoutKey}|${index}`}
         initial={dealing ? { y: 160, opacity: 0, rotate: 0 } : false}
         animate={{
-          y: arc - (selected ? 24 : live ? 8 : 0),
+          y: arc - (pending ? 40 : selected ? 24 : live ? 8 : 0),
           // Dimming has to live here rather than in a class: Motion writes
           // opacity inline, and inline always wins.
-          opacity: live ? 1 : 0.42,
+          opacity: pending ? 0.6 : live ? 1 : 0.42,
           rotate: rotation,
           scale: selected ? 1.06 : 1,
         }}
@@ -230,6 +273,7 @@ const HandCard = memo(
         }}
         aria-label={`${cardLabel(card)}${canJump ? ', can jump in' : live ? '' : ', not playable'}`}
         aria-disabled={!live}
+        aria-busy={pending || undefined}
       >
         <span className="block">
           <CardFace card={card} colorblind={colorblind} className="w-full" />
@@ -246,6 +290,7 @@ const HandCard = memo(
     previous.canJump === next.canJump &&
     previous.live === next.live &&
     previous.selected === next.selected &&
+    previous.pending === next.pending &&
     previous.compact === next.compact &&
     previous.colorblind === next.colorblind &&
     previous.dealing === next.dealing &&

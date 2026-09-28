@@ -20,6 +20,8 @@ interface CenterPilesProps {
   direction: 1 | -1;
   colorblind: boolean;
   canDraw: boolean;
+  /** A draw was asked for and the table has not answered yet. */
+  drawPending: boolean;
   onDraw: () => void;
   deckRef: (element: HTMLElement | null) => void;
   discardRef: (element: HTMLElement | null) => void;
@@ -39,6 +41,7 @@ export const CenterPiles = memo(function CenterPiles({
   direction,
   colorblind,
   canDraw,
+  drawPending,
   onDraw,
   deckRef,
   discardRef,
@@ -67,9 +70,10 @@ export const CenterPiles = memo(function CenterPiles({
           ref={deckRef as (element: HTMLButtonElement | null) => void}
           onClick={onDraw}
           disabled={!canDraw}
+          aria-busy={drawPending || undefined}
           aria-label={canDraw ? `Draw a card. ${drawCount} left in the deck.` : `Deck: ${drawCount} cards left`}
           className={`relative block w-24 transition sm:w-24 ${
-            canDraw ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'
+            !canDraw ? 'cursor-default' : drawPending ? 'translate-y-0.5 opacity-70' : 'cursor-pointer hover:-translate-y-1'
           }`}
         >
           {/* Two shadows under the top back, so it reads as a stack. */}

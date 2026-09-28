@@ -6,7 +6,7 @@
  * events that came with the snapshot drive sound and the card flights.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CardBack } from '../components/Card';
 import { CARD_COLORS } from '../lib/colors';
@@ -47,6 +47,8 @@ interface Flight {
 
 let flightId = 0;
 const ignoreElementRef = () => {};
+/** How long a draw waits for the table to answer before the deck settles back. */
+const DRAW_PENDING_TIMEOUT_MS = 1500;
 
 export function Table({
   room,
@@ -231,7 +233,27 @@ export function Table({
     void card;
   }, []);
 
-  const draw = useCallback(() => act({ t: 'intent', intent: { type: 'DRAW' } }), [act]);
+  // A draw answers the tap at once as well: the deck and the button show it is
+  // on its way, and further draws wait until what you can do changes (the
+  // room keeps `moves` identical otherwise), or until the timeout if refused.
+  const [drawSent, setDrawSent] = useState<LegalMoves | null>(null);
+  const drawPending = drawSent !== null && drawSent === moves;
+  useEffect(() => {
+    if (!drawSent) return;
+    const id = window.setTimeout(() => setDrawSent(null), DRAW_PENDING_TIMEOUT_MS);
+    return () => window.clearTimeout(id);
+  }, [drawSent]);
+  const latestMoves = useRef({ moves, drawPending });
+  useLayoutEffect(() => {
+    latestMoves.current = { moves, drawPending };
+  });
+
+  const draw = useCallback(() => {
+    const now = latestMoves.current;
+    if (now.drawPending) return;
+    setDrawSent(now.moves);
+    act({ t: 'intent', intent: { type: 'DRAW' } });
+  }, [act]);
   const pass = useCallback(() => act({ t: 'intent', intent: { type: 'PASS' } }), [act]);
   const challenge = useCallback(
     () => act({ t: 'intent', intent: { type: 'CHALLENGE' } }),
@@ -402,6 +424,7 @@ export function Table({
           direction={room.direction}
           colorblind={prefs.colorblind}
           canDraw={moves.canDraw && !spectator}
+          drawPending={drawPending}
           onDraw={draw}
           deckRef={registerDeck}
           discardRef={ignoreElementRef}
@@ -413,6 +436,7 @@ export function Table({
           thinkingName={room.players[room.turn]?.name ?? 'Somebody'}
           onTurn={onTurn}
           owed={owed}
+          drawPending={drawPending}
           spectator={spectator}
           turnDeadline={room.turnDeadline}
           clockSkew={clockSkew}
@@ -532,6 +556,7 @@ const ActionBar = memo(function ActionBar({
   thinkingName,
   onTurn,
   owed,
+  drawPending,
   spectator,
   turnDeadline,
   clockSkew,
@@ -546,6 +571,7 @@ const ActionBar = memo(function ActionBar({
   thinkingName: string;
   onTurn: boolean;
   owed: number;
+  drawPending: boolean;
   spectator: boolean;
   turnDeadline: number | null;
   clockSkew: number;
@@ -612,7 +638,10 @@ const ActionBar = memo(function ActionBar({
           <Pop key="draw" layoutKey={layoutKey}>
             <button
               onClick={onDraw}
-              className="rounded-xl border border-edge bg-raised px-5 py-3 font-semibold text-chalk transition hover:border-chalk-faint"
+              aria-busy={drawPending || undefined}
+              className={`rounded-xl border border-edge bg-raised px-5 py-3 font-semibold text-chalk transition hover:border-chalk-faint ${
+                drawPending ? 'opacity-60' : ''
+              }`}
             >
               {owed > 0 ? `Take ${owed}` : 'Draw a card'}
             </button>
