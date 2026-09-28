@@ -218,7 +218,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - Medians (after vs before): script **28.1 ms** (31.0), style **18.0 ms** (21.4), layout **3.7 ms** (4.45), forced layouts **3.7** (5.4, −31%), style recalcs **21.6** (24.9), total task **108 ms** (121).
     - All 4 pairs improved on script and layouts, but the gain is about −10% script, not the −50% estimated. Most of the remaining per-frame cost is the framer-motion animation frames that each move triggers, not re-renders.
 
-- [ ] **PERF-08 — Show a card or draw as pending the moment it is tapped** · Priority: **Medium** · Effort: M · Risk: Medium
+- [x] **PERF-08 — Show a card or draw as pending the moment it is tapped** · Priority: **Medium** · Effort: M · Risk: Medium · done 2026-09-29
   - **Issue:** tapping a card only sends the intent (`client/components/Hand.tsx:218-222` → `client/screens/Table.tsx:221-227`). Nothing changes locally until the next `sync` removes the card. The deck and action buttons stay live meanwhile, and the sound waits for the server's echo. Measured click → card leaves hand: median 95 ms on desktop and 124 ms at 4× CPU, from Jakarta to a nearby room. A room's Durable Object sits near whoever created it, so a friend on slow 4G or on another continent adds 150–300 ms of round trip to every tap. Double taps in that window come back as error toasts (`no_such_card`, `already_drew`).
   - **Why it matters:** playing a card is the core interaction. INP looks green (≤ 40 ms event duration) while the felt response is a full network round trip.
   - **Optimization:**
@@ -229,7 +229,11 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `client/components/Hand.tsx`, `client/components/CenterPiles.tsx`, `client/screens/Table.tsx`
   - **Depends on:** PERF-07
   - **Measure:** Playwright over 6 turns, median: `pointerdown` → first animation frame in which the tapped card carries the pending state, plus click → card removed (should be unchanged).
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build. Outgoing socket messages were delayed 120 ms in both runs to stand in for the production round trip (a local round trip is ~2 ms).
+    - First visible response to a tapped card: 138 ms, when the card left the hand → **12 ms** (median of 6, pending state painted). At 4× CPU: 143 → **12 ms**.
+    - Draw: 131 → **12–14 ms**.
+    - Card removal is unchanged, as intended: 138 → 134–146 ms.
+    - Double tap (4 turns): before, **2** intents per tap and a "That card is not in your hand." toast every time; after, **1** intent and no toast.
 
 - [ ] **PERF-09 — Detect dead sockets and reconnect as soon as the network is back** · Priority: **Medium** · Effort: M · Risk: Medium
   - **Issue:**
