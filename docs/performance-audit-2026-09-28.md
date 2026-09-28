@@ -166,7 +166,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Measure:** Playwright: during a bot game, drop the socket, then time the `role=status` "Back in." toast until it is hidden while frames keep arriving.
   - **Before → After:** "Back in." toast during bot play went from > 5.9 s (local; > 12.5 s in production) to **4.0 s** on the local production build, with 3 frames arriving while it showed. That is the 3.6 s timer, plus the 0.22 s exit animation, plus polling granularity.
 
-- [ ] **PERF-05 — Warm the join path before the click** · Priority: **High** · Effort: S · Risk: Low
+- [x] **PERF-05 — Warm the join path before the click** · Priority: **High** · Effort: S · Risk: Low · done 2026-09-29
   - **Issue:** Join sends `GET /api/rooms/:code` only on submit (`client/screens/Landing.tsx:68-93`). The room chunks (57.6 KB gz) also start only on click (`client/App.tsx:20-28`, called from `client/screens/Landing.tsx:75`). On slow 4G the GET takes 193–224 ms and framer-motion lands at ~525 ms, so the socket cannot start before ~540 ms (join → lobby 1,092 ms).
   - **Why it matters:** joining a friend's room is the second most common entry. After PERF-01, the remaining slow-4G join time is mostly these two waits, both of which could have finished while the player was typing the code.
   - **Optimization:**
@@ -177,7 +177,10 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `client/App.tsx`, `client/screens/Landing.tsx`
   - **Depends on:** PERF-01
   - **Measure:** Playwright join timeline (a second browser context joins an existing room), median of 3, desktop and slow: click → `lobby`, and click → `wsNew`.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build, median of 3.
+    - **Realistic join** (1.5 s on Landing, 0.4 s between typing the code and clicking Join; "before" measured on the PERF-04 build with the same script): desktop 79 → **47 ms**, slow 4G + 4× CPU 1,143 → **287 ms**. The room check now finishes 130–270 ms before the click, and the socket opens 38 → 14 ms (desktop) and 235 → 59 ms (slow) after it.
+    - **Original script** (click immediately after filling, so the check cannot start first): slow join 1,123 → **440 ms**, desktop 62 → 66 ms (unchanged).
+    - Idle prefetch also helps create: slow create → lobby 1,115 → **400 ms**.
 
 - [ ] **PERF-06 — Recover from stale chunks after a deploy instead of going blank** · Priority: **Medium** · Effort: S · Risk: Low
   - **Issue:** there is no error boundary and no `vite:preloadError` handler anywhere in `client/`. A tab loaded before a deploy still references the old hashed chunks. On Create or Join, `import('./RoomShell-<old>.js')` fails (today it even receives HTML), `React.lazy` throws, and the page goes blank.

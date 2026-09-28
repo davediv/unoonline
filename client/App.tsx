@@ -72,6 +72,21 @@ export default function App() {
     return () => window.removeEventListener('pagehide', flush);
   }, []);
 
+  // On the way in, fetch the room's code once the page has settled, so Create
+  // and Join do not wait on it. Not when the browser asks to save data.
+  useEffect(() => {
+    if (code) return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+    // Safari has no requestIdleCallback.
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(prepareRoom, { timeout: 1500 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(prepareRoom, 1500);
+    return () => window.clearTimeout(id);
+  }, [code]);
+
   // Back and forward should move between the landing page and a room.
   useEffect(() => {
     const onPop = () => setCode(codeFromPath());
