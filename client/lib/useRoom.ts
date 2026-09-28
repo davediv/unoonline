@@ -56,6 +56,12 @@ export interface RoomConnection {
 
 const MAX_BACKOFF_MS = 8000;
 const PING_INTERVAL_MS = 25_000;
+/**
+ * A socket can stay "open" long after the network under it died — a phone
+ * switching from Wi-Fi to cellular, or waking up. If nothing at all arrives
+ * within this long of a ping, the line is dead and gets replaced.
+ */
+const PONG_TIMEOUT_MS = 10_000;
 const CHAT_LIMIT = 120;
 /**
  * Skew moves by a few ms with every frame's network jitter. Following that
@@ -81,17 +87,24 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
   const retryRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const pingRef = useRef<number | null>(null);
+  const pongTimerRef = useRef<number | null>(null);
+  /** When anything last arrived on the socket, as `performance.now()`. */
+  const heardAtRef = useRef(0);
   const stoppedRef = useRef(false);
   const seqRef = useRef(0);
   const errorSeqRef = useRef(0);
 
   const key = options ? `${options.code}|${options.name}|${options.avatar}|${options.spectate}` : '';
 
-  const cleanup = useCallback(() => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  const stopPinging = useCallback(() => {
     if (pingRef.current !== null) window.clearInterval(pingRef.current);
-    timerRef.current = null;
+    if (pongTimerRef.current !== null) window.clearTimeout(pongTimerRef.current);
     pingRef.current = null;
+    pongTimerRef.current = null;
+  }, []);
+
+  /** Lets go of the current socket without hearing from it again. */
+  const dropSocket = useCallback(() => {
     const socket = socketRef.current;
     socketRef.current = null;
     if (socket) {
@@ -104,6 +117,13 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
       }
     }
   }, []);
+
+  const cleanup = useCallback(() => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    stopPinging();
+    dropSocket();
+  }, [dropSocket, stopPinging]);
 
   useEffect(() => {
     if (!options) return;
@@ -128,15 +148,13 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
       socketRef.current = socket;
 
       socket.onopen = () => {
-        retryRef.current = 0;
+        heardAtRef.current = performance.now();
         setStatus('open');
-        pingRef.current = window.setInterval(() => {
-          // Answered by the runtime itself, so the room stays hibernated.
-          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ t: 'ping' }));
-        }, PING_INTERVAL_MS);
+        pingRef.current = window.setInterval(ping, PING_INTERVAL_MS);
       };
 
       socket.onmessage = (event) => {
+        heardAtRef.current = performance.now();
         let message: ServerMessage;
         try {
           message = JSON.parse(event.data as string) as ServerMessage;
@@ -146,6 +164,9 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
 
         switch (message.t) {
           case 'welcome':
+            // Only a room that answered counts as back: a socket that opens
+            // and drops again keeps backing off rather than retrying at once.
+            retryRef.current = 0;
             saveToken(options.code, message.token);
             setYouId(message.youId);
             setSpectator(message.spectator);
@@ -196,26 +217,62 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
         }
       };
 
-      socket.onclose = () => {
-        if (pingRef.current !== null) window.clearInterval(pingRef.current);
-        pingRef.current = null;
-        if (stoppedRef.current) {
-          setStatus('closed');
-          return;
-        }
-        setStatus('reconnecting');
-        // 0.5s, 1s, 2s, 4s, 8s, with a little jitter so a room full of
-        // players does not all reconnect on the same tick.
-        const attempt = retryRef.current++;
-        const backoff = Math.min(MAX_BACKOFF_MS, 500 * 2 ** attempt);
-        const jitter = backoff * 0.25 * Math.random();
-        timerRef.current = window.setTimeout(connect, backoff + jitter);
-      };
+      socket.onclose = () => retry(socket);
 
       socket.onerror = () => {
         // `onclose` always follows, and that is where the retry lives.
       };
     };
+
+    /** Gives up on `socket` and schedules the next attempt — once per socket. */
+    const retry = (socket: WebSocket) => {
+      if (socketRef.current !== socket) return;
+      stopPinging();
+      dropSocket();
+      if (stoppedRef.current) {
+        setStatus('closed');
+        return;
+      }
+      setStatus('reconnecting');
+      // 0.5s, 1s, 2s, 4s, 8s, with a little jitter so a room full of
+      // players does not all reconnect on the same tick.
+      const attempt = retryRef.current++;
+      const backoff = Math.min(MAX_BACKOFF_MS, 500 * 2 ** attempt);
+      const jitter = backoff * 0.25 * Math.random();
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        connect();
+      }, backoff + jitter);
+    };
+
+    /** Answered by the runtime itself, so the room stays hibernated. */
+    const ping = () => {
+      const socket = socketRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      const sentAt = performance.now();
+      socket.send(JSON.stringify({ t: 'ping' }));
+      if (pongTimerRef.current !== null) return;
+      pongTimerRef.current = window.setTimeout(() => {
+        pongTimerRef.current = null;
+        // Anything heard since the ping proves the line is alive.
+        if (heardAtRef.current < sentAt) retry(socket);
+      }, PONG_TIMEOUT_MS);
+    };
+
+    // Back online, or back from the background: check an open socket now
+    // rather than at the next ping, and cut short a backoff in progress.
+    const wake = () => {
+      if (stoppedRef.current || document.visibilityState === 'hidden') return;
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        ping();
+      } else if (!socketRef.current && timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+        connect();
+      }
+    };
+    window.addEventListener('online', wake);
+    document.addEventListener('visibilitychange', wake);
 
     // Strict Mode mounts effects once, immediately cleans them up, then mounts
     // them again in development. Opening the socket synchronously lets the
@@ -228,6 +285,8 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
       connect();
     }, 0);
     return () => {
+      window.removeEventListener('online', wake);
+      document.removeEventListener('visibilitychange', wake);
       stoppedRef.current = true;
       cleanup();
     };
