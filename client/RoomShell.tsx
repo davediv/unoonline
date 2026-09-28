@@ -4,21 +4,21 @@
  * WebSocket client, game table, or animation runtime.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Toasts } from './components/Toasts';
+import { preloadable } from './lib/preloadable';
 import { toastText, useToasts } from './lib/toasts';
 import { useRoom } from './lib/useRoom';
 import { randomNickname } from '../shared/room';
 import { cryptoRng } from '../shared/rng';
 
-const loadLobby = () => import('./screens/Lobby');
-const loadTable = () => import('./screens/Table');
-
-const Lobby = lazy(() => loadLobby().then((module) => ({ default: module.Lobby })));
-const Table = lazy(() => loadTable().then((module) => ({ default: module.Table })));
+const lobby = preloadable(() => import('./screens/Lobby').then((module) => module.Lobby));
+const table = preloadable(() => import('./screens/Table').then((module) => module.Table));
+const Lobby = lobby.Component;
+const Table = table.Component;
 
 function preloadRoomScreens(): void {
-  void Promise.all([loadLobby(), loadTable()]).catch(() => {
+  void Promise.all([lobby.preload(), table.preload()]).catch(() => {
     // The lazy boundary remains the source of truth for an actual navigation.
   });
 }

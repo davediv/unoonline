@@ -98,7 +98,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
 
 ## Recommendations
 
-- [ ] **PERF-01 — Render preloaded screens without React's 300 ms Suspense hold** · Priority: **Critical** · Effort: S · Risk: Low
+- [x] **PERF-01 — Render preloaded screens without React's 300 ms Suspense hold** · Priority: **Critical** · Effort: S · Risk: Low · done 2026-09-29
   - **Issue:** `React.lazy` only calls its loader the first time it renders, so a screen whose chunk is already downloaded still suspends once. React 19 then holds the reveal until at least 300 ms after the fallback was committed (`FALLBACK_THROTTLE_MS`). Three lazy screens sit on the hot path: RoomShell (`client/App.tsx:16-17`, `client/App.tsx:101-110`), then Lobby and Table (`client/RoomShell.tsx:14-18`, `client/RoomShell.tsx:100-117`). The holds were measured on every flow: "Preparing the table…" lasts 300–303 ms, and "Laying out the cards…" lasts 305–322 ms before the lobby and 309 ms before the table. The socket is opened inside RoomShell (`client/RoomShell.tsx:49`), so the first hold also delays the WebSocket.
   - **Why it matters:** this is pure waiting on the two most important transitions in the app: getting into a room, and every player seeing the table when a game starts. It is the same ~0.3–0.6 s on the fastest and the slowest device, so it dominates on good connections (join: 600 of 816 ms).
   - **Optimization:** add a small `preloadable(loader)` helper that remembers the module once its loader resolves. The component it returns renders the resolved module synchronously, and falls back to `React.lazy` + `Suspense` only while the chunk is genuinely still loading. Use it for RoomShell, Lobby and Table, with the existing `prepareRoom`/`preloadRoomScreens` calling its `preload()`. The chunk split and every fallback stay as they are.
@@ -110,7 +110,11 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `client/App.tsx`, `client/RoomShell.tsx`, new `client/lib/preloadable.tsx`
   - **Depends on:** —
   - **Measure:** Playwright timeline marks, median of 3: click → `lobby` for create and join, click → `table` for Start game, and nav → `lobby` for a cold link. With preloaded chunks, "Preparing the table…" and "Laying out the cards…" should no longer appear.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build (`vite preview`), median of 3.
+    - Desktop: create → lobby 672 → **135 ms**, join → lobby 678 → **130 ms**, Start game → table 323 → **22 ms**. Loading fallbacks seen on create/join/start: 3/3 → 0/3.
+    - Slow 4G + 4× CPU: Start game → table 357 → **92 ms**.
+    - Unchanged locally: slow create 1,268 → 1,272 ms and slow join 1,306 → 1,337 ms. The local preview serves framer-motion uncompressed (120 KB), so RoomShell is still genuinely downloading when the local POST returns; the post-welcome hold is gone (welcome → lobby ~300 → 15–45 ms). In production the chunks finish before the 754 ms POST.
+    - Cold link 715 → 691 ms (1 of 3 runs avoided the hold). Its Lobby chunk still races the `welcome` frame; PERF-03 moves the preload to boot.
 
 - [ ] **PERF-02 — Cache hashed assets for a year and 404 missing ones** · Priority: **High** · Effort: S · Risk: Low
   - **Issue:** `worker/index.ts:68-72` returns the `ASSETS` response unchanged, so every content-hashed file under `/uno/assets/` carries `public, max-age=0, must-revalidate`. `_headers` cannot fix this because `run_worker_first` is on (`wrangler.jsonc:49-50`). Measured on a repeat visit: 6 × 304 on `/uno/` alone. A room link adds two more dependent tiers (RoomShell + framer-motion, then Lobby/Table). A missing hashed file, such as a chunk from the previous deploy, comes back as `index.html` with a 200.
