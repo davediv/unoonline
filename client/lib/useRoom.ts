@@ -15,6 +15,7 @@ import { withBase } from '../../shared/base';
 import type { GameEvent, PublicRoom } from '../../shared/types';
 import type { ChatMessage, ClientMessage, ServerMessage } from '../../shared/protocol';
 import { clearToken, loadToken, saveToken } from './prefs';
+import { share } from './share';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -56,6 +57,15 @@ export interface RoomConnection {
 const MAX_BACKOFF_MS = 8000;
 const PING_INTERVAL_MS = 25_000;
 const CHAT_LIMIT = 120;
+/**
+ * Skew moves by a few ms with every frame's network jitter. Following that
+ * would re-render every clock on the table for nothing a player could see.
+ */
+const SKEW_TOLERANCE_MS = 100;
+
+function nextSkew(previous: number, measured: number): number {
+  return Math.abs(measured - previous) > SKEW_TOLERANCE_MS ? measured : previous;
+}
 
 export function useRoom(options: JoinOptions | null): RoomConnection {
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
@@ -144,9 +154,13 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
             setClockSkew(message.room.now - Date.now());
             break;
 
-          case 'sync':
-            setRoom(message.room);
-            setClockSkew(message.room.now - Date.now());
+          case 'sync': {
+            // Unchanged parts keep their identity, so memoized seats, piles
+            // and cards skip the frames that do not touch them.
+            const next = message.room;
+            setRoom((previous) => (previous ? share(previous, next) : next));
+            const skew = next.now - Date.now();
+            setClockSkew((previous) => nextSkew(previous, skew));
             if (message.chat && message.chat.length > 0) {
               setChat((previous) => [...previous, ...(message.chat ?? [])].slice(-CHAT_LIMIT));
             }
@@ -155,6 +169,7 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
               setPulse({ seq: seqRef.current, events: message.events });
             }
             break;
+          }
 
           case 'chat':
             if (message.messages.length > 0) {

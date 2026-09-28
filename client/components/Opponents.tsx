@@ -6,18 +6,29 @@
  * On a phone the fans collapse to avatar chips.
  */
 
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Avatar } from './Avatar';
 import { CardBack } from './Card';
 import { useTicker } from '../lib/hooks';
-import type { PublicPlayer, PublicRoom } from '../../shared/types';
+import type { Phase, PublicPlayer, TurnTimer, UnoWindow } from '../../shared/types';
 
 const RING_RADIUS = 21;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
+/**
+ * Only the parts of the room the seats draw, so a frame that changes
+ * something else — the pile, your hand — does not re-render them.
+ */
 interface OpponentsProps {
-  room: PublicRoom;
+  players: PublicPlayer[];
+  turn: number;
+  /** A pending choice (a colour, a swap) is who the table is waiting on. */
+  pendingPlayerId: string | null;
+  uno: UnoWindow | null;
+  turnDeadline: number | null;
+  turnTimer: TurnTimer;
+  phase: Phase;
   youId: string | null;
   /** Server clock minus the browser clock. */
   clockSkew: number;
@@ -25,24 +36,49 @@ interface OpponentsProps {
   registerSeat: (playerId: string, element: HTMLElement | null) => void;
 }
 
+/** Five is enough to read as a hand; more just merges into the next seat. */
+function fanOf(player: PublicPlayer, compact: boolean): number {
+  return Math.min(player.handCount, compact ? 0 : 5);
+}
+
+function statusOf(player: PublicPlayer, phase: Phase): string {
+  if (player.botControlled) return 'bot playing';
+  if (!player.connected) return 'away';
+  if (player.isBot) return player.botLevel;
+  return phase === 'playing' ? `${player.score}` : '';
+}
+
 export const Opponents = memo(function Opponents({
-  room,
+  players,
+  turn,
+  pendingPlayerId,
+  uno,
+  turnDeadline,
+  turnTimer,
+  phase,
   youId,
   clockSkew,
   compact,
   registerSeat,
 }: OpponentsProps) {
   // Seat order, starting from the player after you, so the table reads round.
-  const youIndex = room.players.findIndex((player) => player.id === youId);
+  const youIndex = players.findIndex((player) => player.id === youId);
   const start = youIndex >= 0 ? youIndex : 0;
   const others: PublicPlayer[] = [];
-  for (let step = 1; step < room.players.length; step++) {
-    others.push(room.players[(start + step) % room.players.length]);
+  for (let step = 1; step < players.length; step++) {
+    others.push(players[(start + step) % players.length]);
   }
   if (youIndex < 0) others.length = 0;
-  const seats = youIndex < 0 ? room.players : others;
+  const seats = youIndex < 0 ? players : others;
 
-  const actorId = room.pending ? room.pending.playerId : room.players[room.turn]?.id;
+  const actorId = pendingPlayerId ?? players[turn]?.id;
+
+  // Seats share one row, so any seat changing size moves the others. Each
+  // seat re-measures for its layout animation only when this changes, rather
+  // than on every frame the room sends.
+  const layoutKey = seats
+    .map((player) => `${player.id}:${fanOf(player, compact)}:${player.name}:${statusOf(player, phase)}`)
+    .join('|');
 
   return (
     <div
@@ -60,11 +96,15 @@ export const Opponents = memo(function Opponents({
           <Seat
             key={player.id}
             player={player}
-            room={room}
             isActor={player.id === actorId}
+            uno={uno?.playerId === player.id ? uno : null}
+            turnDeadline={turnDeadline}
+            turnTimer={turnTimer}
+            phase={phase}
             clockSkew={clockSkew}
             compact={compact}
             lift={lift}
+            layoutKey={layoutKey}
             registerSeat={registerSeat}
           />
         );
@@ -73,31 +113,43 @@ export const Opponents = memo(function Opponents({
   );
 });
 
-function Seat({
+const Seat = memo(function Seat({
   player,
-  room,
   isActor,
+  uno,
+  turnDeadline,
+  turnTimer,
+  phase,
   clockSkew,
   compact,
   lift,
+  layoutKey,
   registerSeat,
 }: {
   player: PublicPlayer;
-  room: PublicRoom;
   isActor: boolean;
+  /** The UNO window, when it is this player's. */
+  uno: UnoWindow | null;
+  turnDeadline: number | null;
+  turnTimer: TurnTimer;
+  phase: Phase;
   clockSkew: number;
   compact: boolean;
   lift: number;
+  layoutKey: string;
   registerSeat: (playerId: string, element: HTMLElement | null) => void;
 }) {
-  const onUno = room.uno?.playerId === player.id;
-
-  // Five is enough to read as a hand; more just merges into the next seat.
-  const fanned = Math.min(player.handCount, compact ? 0 : 5);
+  const fanned = fanOf(player, compact);
+  const playerId = player.id;
+  const seatRef = useCallback(
+    (element: HTMLElement | null) => registerSeat(playerId, element),
+    [playerId, registerSeat],
+  );
 
   return (
     <motion.div
       layout
+      layoutDependency={layoutKey}
       style={{ transform: `translateY(-${lift}px)` }}
       className="flex shrink-0 flex-col items-center gap-1"
     >
@@ -120,16 +172,12 @@ function Seat({
         </div>
       )}
 
-      <div className="relative" ref={(element) => registerSeat(player.id, element)}>
+      <div className="relative" ref={seatRef}>
         <Avatar index={player.avatar} size={compact ? 38 : 46} />
 
         {/* Turn ring, and the clock drawn around it. */}
         {isActor && (
-          <TurnRing
-            deadline={room.turnDeadline}
-            durationSeconds={room.rules.turnTimer}
-            clockSkew={clockSkew}
-          />
+          <TurnRing deadline={turnDeadline} durationSeconds={turnTimer} clockSkew={clockSkew} />
         )}
 
         {/* Card count, always a number rather than a guess at the fan. */}
@@ -137,9 +185,9 @@ function Seat({
           {player.handCount}
         </span>
 
-        {onUno && (
+        {uno && (
           <span className="display absolute -top-2 -left-2 rounded-md bg-uno-red px-1.5 py-0.5 text-[10px] tracking-tight text-white">
-            {room.uno?.called ? 'UNO!' : '1'}
+            {uno.called ? 'UNO!' : '1'}
           </span>
         )}
       </div>
@@ -153,21 +201,11 @@ function Seat({
         >
           {player.name}
         </span>
-        <span className="text-[10px] text-chalk-faint">
-          {player.botControlled
-            ? 'bot playing'
-            : !player.connected
-              ? 'away'
-              : player.isBot
-                ? player.botLevel
-                : room.phase === 'playing'
-                  ? `${player.score}`
-                  : ''}
-        </span>
+        <span className="text-[10px] text-chalk-faint">{statusOf(player, phase)}</span>
       </div>
     </motion.div>
   );
-}
+});
 
 /** Only this tiny SVG updates every 100ms; the seats and card fans stay put. */
 function TurnRing({

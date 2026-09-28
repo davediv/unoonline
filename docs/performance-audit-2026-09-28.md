@@ -196,7 +196,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - With the chunk missing permanently: exactly 1 reload, then it stops (no loop).
     - It only reloads on a room URL, so a failed idle prefetch on Landing never reloads the page under the player.
 
-- [ ] **PERF-07 — Cut the work each incoming frame does on the table** · Priority: **Medium** · Effort: M · Risk: Medium
+- [x] **PERF-07 — Cut the work each incoming frame does on the table** · Priority: **Medium** · Effort: M · Risk: Medium · done 2026-09-29
   - **Issue:** each `sync` frame replaces `room` with a new object from `JSON.parse` (`client/lib/useRoom.ts:147-149`) and moves `clockSkew` by a few ms, so almost the whole table re-renders on every move:
     - Table re-derives `hand` and `ordered` (`client/screens/Table.tsx:77-82`).
     - Table passes the whole `room` to Opponents, CenterPiles and ActionBar (`client/screens/Table.tsx:381-441`).
@@ -210,10 +210,13 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - Pass narrow props instead of `room`, and `memo` `Seat`.
     - Give each `layout` element a `layoutDependency` keyed on what actually moves its box (seat order and fan size, visible action buttons, card order and overlap).
   - **Expected impact:** about −50% script per frame (20.5 → ~10 ms at 4× CPU, estimated) and 5.6 → ≤ 2 layouts per frame. Nothing visible changes at today's load; this is headroom for slow devices.
-  - **Files:** `client/lib/useRoom.ts`, `client/screens/Table.tsx`, `client/components/Opponents.tsx`, `client/components/Hand.tsx`
+  - **Files:** `client/lib/useRoom.ts`, `client/lib/share.ts` (new), `client/screens/Table.tsx`, `client/components/Opponents.tsx`, `client/components/CenterPiles.tsx` (narrow props), `client/components/Hand.tsx`
   - **Depends on:** PERF-03
   - **Measure:** CDP `Performance.getMetrics` over a 30 s bot game at 4× CPU: `ScriptDuration`, `RecalcStyleDuration` and `LayoutCount`, each divided by the number of `sync` frames.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** per opponent frame at 4× CPU, measured only while opponents move (15–26 frames per run).
+    - Method: the machine's load average was ~15–40, so before and after were run as 4 interleaved A/B pairs: the PERF-06 build on one port and this build on another.
+    - Medians (after vs before): script **28.1 ms** (31.0), style **18.0 ms** (21.4), layout **3.7 ms** (4.45), forced layouts **3.7** (5.4, −31%), style recalcs **21.6** (24.9), total task **108 ms** (121).
+    - All 4 pairs improved on script and layouts, but the gain is about −10% script, not the −50% estimated. Most of the remaining per-frame cost is the framer-motion animation frames that each move triggers, not re-renders.
 
 - [ ] **PERF-08 — Show a card or draw as pending the moment it is tapped** · Priority: **Medium** · Effort: M · Risk: Medium
   - **Issue:** tapping a card only sends the intent (`client/components/Hand.tsx:218-222` → `client/screens/Table.tsx:221-227`). Nothing changes locally until the next `sync` removes the card. The deck and action buttons stay live meanwhile, and the sound waits for the server's echo. Measured click → card leaves hand: median 95 ms on desktop and 124 ms at 4× CPU, from Jakarta to a nearby room. A room's Durable Object sits near whoever created it, so a friend on slow 4G or on another continent adds 150–300 ms of round trip to every tap. Double taps in that window come back as error toasts (`no_such_card`, `already_drew`).

@@ -17,7 +17,7 @@ import { ColorPicker, HandReveal, SwapPicker } from '../components/Overlays';
 import { Scoreboard } from '../components/Scoreboard';
 import { Chat } from '../components/Chat';
 import { ChatIcon, ShapesIcon, SortIcon, SoundOffIcon, SoundOnIcon } from '../components/Icons';
-import type { Card, Color, GameEvent, PublicRoom } from '../../shared/types';
+import type { Card, Color, GameEvent, LegalMoves, Phase, PublicRoom } from '../../shared/types';
 import { sortHand } from '../../shared/deck';
 import type { ChatMessage, ClientMessage } from '../../shared/protocol';
 import { usePrefs } from '../lib/prefsContext';
@@ -379,7 +379,13 @@ export function Table({
       {/* The far side of the table */}
       <div className="shrink-0 pt-1 pb-2">
         <Opponents
-          room={room}
+          players={room.players}
+          turn={room.turn}
+          pendingPlayerId={room.pending?.playerId ?? null}
+          uno={room.uno}
+          turnDeadline={room.turnDeadline}
+          turnTimer={room.rules.turnTimer}
+          phase={room.phase}
           youId={youId}
           clockSkew={clockSkew}
           compact={compact}
@@ -390,7 +396,10 @@ export function Table({
       {/* The middle */}
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
         <CenterPiles
-          room={room}
+          discardTop={room.discardTop}
+          drawCount={room.drawCount}
+          activeColor={room.activeColor}
+          direction={room.direction}
           colorblind={prefs.colorblind}
           canDraw={moves.canDraw && !spectator}
           onDraw={draw}
@@ -399,7 +408,9 @@ export function Table({
         />
 
         <ActionBar
-          room={room}
+          moves={moves}
+          phase={room.phase}
+          thinkingName={room.players[room.turn]?.name ?? 'Somebody'}
           onTurn={onTurn}
           owed={owed}
           spectator={spectator}
@@ -516,7 +527,9 @@ function RailButton({
 }
 
 const ActionBar = memo(function ActionBar({
-  room,
+  moves,
+  phase,
+  thinkingName,
   onTurn,
   owed,
   spectator,
@@ -528,7 +541,9 @@ const ActionBar = memo(function ActionBar({
   onUno,
   onCatch,
 }: {
-  room: PublicRoom;
+  moves: LegalMoves;
+  phase: Phase;
+  thinkingName: string;
   onTurn: boolean;
   owed: number;
   spectator: boolean;
@@ -540,14 +555,28 @@ const ActionBar = memo(function ActionBar({
   onUno: () => void;
   onCatch: (targetId: string) => void;
 }) {
-  const moves = room.moves;
   if (spectator) return null;
+
+  const counting = onTurn && turnDeadline !== null;
+  const thinking = !onTurn && !moves.canCallUno && !moves.catchTargetId && phase === 'playing';
+  // The buttons share a centred row, so they only move when what is in the
+  // row changes — not on every frame that re-renders the bar.
+  const layoutKey = [
+    moves.canCallUno,
+    Boolean(moves.catchTargetId),
+    moves.canChallenge,
+    moves.canDraw,
+    moves.canPass,
+    owed,
+    counting,
+    thinking && thinkingName,
+  ].join('|');
 
   return (
     <div className="flex min-h-14 flex-wrap items-center justify-center gap-2 px-3">
       <AnimatePresence mode="popLayout">
         {moves.canCallUno && (
-          <Pop key="uno">
+          <Pop key="uno" layoutKey={layoutKey}>
             <button
               onClick={onUno}
               className="display rounded-xl bg-uno-red px-7 py-3 text-xl text-white shadow-lg transition hover:brightness-110"
@@ -558,7 +587,7 @@ const ActionBar = memo(function ActionBar({
         )}
 
         {moves.catchTargetId && (
-          <Pop key="catch">
+          <Pop key="catch" layoutKey={layoutKey}>
             <button
               onClick={() => onCatch(moves.catchTargetId as string)}
               className="display rounded-xl bg-uno-yellow px-6 py-3 text-lg text-[#3a2600] shadow-lg transition hover:brightness-110"
@@ -569,7 +598,7 @@ const ActionBar = memo(function ActionBar({
         )}
 
         {moves.canChallenge && (
-          <Pop key="challenge">
+          <Pop key="challenge" layoutKey={layoutKey}>
             <button
               onClick={onChallenge}
               className="rounded-xl border border-chalk px-5 py-3 font-semibold text-chalk transition hover:bg-chalk/10"
@@ -580,7 +609,7 @@ const ActionBar = memo(function ActionBar({
         )}
 
         {moves.canDraw && (
-          <Pop key="draw">
+          <Pop key="draw" layoutKey={layoutKey}>
             <button
               onClick={onDraw}
               className="rounded-xl border border-edge bg-raised px-5 py-3 font-semibold text-chalk transition hover:border-chalk-faint"
@@ -591,7 +620,7 @@ const ActionBar = memo(function ActionBar({
         )}
 
         {moves.canPass && (
-          <Pop key="pass">
+          <Pop key="pass" layoutKey={layoutKey}>
             <button
               onClick={onPass}
               className="rounded-xl border border-edge bg-raised px-5 py-3 font-semibold text-chalk transition hover:border-chalk-faint"
@@ -602,15 +631,9 @@ const ActionBar = memo(function ActionBar({
         )}
       </AnimatePresence>
 
-      {onTurn && turnDeadline !== null && (
-        <TurnCountdown deadline={turnDeadline} clockSkew={clockSkew} />
-      )}
+      {counting && <TurnCountdown deadline={turnDeadline} clockSkew={clockSkew} />}
 
-      {!onTurn && !moves.canCallUno && !moves.catchTargetId && room.phase === 'playing' && (
-        <span className="text-sm text-chalk-faint">
-          {room.players[room.turn]?.name ?? 'Somebody'} is thinking…
-        </span>
-      )}
+      {thinking && <span className="text-sm text-chalk-faint">{thinkingName} is thinking…</span>}
     </div>
   );
 });
@@ -625,10 +648,11 @@ function TurnCountdown({ deadline, clockSkew }: { deadline: number; clockSkew: n
   );
 }
 
-function Pop({ children }: { children: React.ReactNode }) {
+function Pop({ children, layoutKey }: { children: React.ReactNode; layoutKey: string }) {
   return (
     <motion.div
       layout
+      layoutDependency={layoutKey}
       initial={{ opacity: 0, scale: 0.86, y: 8 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
