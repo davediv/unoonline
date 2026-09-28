@@ -116,7 +116,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - Unchanged locally: slow create 1,268 → 1,272 ms and slow join 1,306 → 1,337 ms. The local preview serves framer-motion uncompressed (120 KB), so RoomShell is still genuinely downloading when the local POST returns; the post-welcome hold is gone (welcome → lobby ~300 → 15–45 ms). In production the chunks finish before the 754 ms POST.
     - Cold link 715 → 691 ms (1 of 3 runs avoided the hold). Its Lobby chunk still races the `welcome` frame; PERF-03 moves the preload to boot.
 
-- [ ] **PERF-02 — Cache hashed assets for a year and 404 missing ones** · Priority: **High** · Effort: S · Risk: Low
+- [x] **PERF-02 — Cache hashed assets for a year and 404 missing ones** · Priority: **High** · Effort: S · Risk: Low · done 2026-09-29
   - **Issue:** `worker/index.ts:68-72` returns the `ASSETS` response unchanged, so every content-hashed file under `/uno/assets/` carries `public, max-age=0, must-revalidate`. `_headers` cannot fix this because `run_worker_first` is on (`wrangler.jsonc:49-50`). Measured on a repeat visit: 6 × 304 on `/uno/` alone. A room link adds two more dependent tiers (RoomShell + framer-motion, then Lobby/Table). A missing hashed file, such as a chunk from the previous deploy, comes back as `index.html` with a 200.
   - **Why it matters:** returning players, which is most of a friends' game, pay one round trip per tier before any code runs: about 150 ms each on slow 4G. Each revalidation is also a billed Worker invocation. Serving HTML for a JS URL is what makes a stale tab fail hard (see PERF-06), and it must never be cached as immutable.
   - **Optimization:** for paths under `/assets/`:
@@ -131,7 +131,11 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - `curl -sI <origin>/uno/assets/<hash>.js | grep -i cache-control` shows `immutable`.
     - `curl -s -o /dev/null -w '%{http_code} %{content_type}' <origin>/uno/assets/missing.js` returns `404`.
     - The Playwright repeat-visit probe counts 304s on `/uno/`: 6 → 0.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build (`vite preview`).
+    - `Cache-Control` on hashed assets: `public, max-age=0, must-revalidate` → `public, max-age=31536000, immutable` (also on 304s).
+    - Missing asset: `200 text/html` → `404`, `no-store`.
+    - `/uno/`, SPA routes and the favicon are unchanged (`max-age=0, must-revalidate`).
+    - Repeat visit to `/uno/`: 304s 6 → **0**, LCP 172 → **48 ms** (desktop) and 420 → **236 ms** (slow 4G + 4× CPU).
 
 - [ ] **PERF-03 — Open the socket and fetch every room chunk as soon as a room URL boots** · Priority: **High** · Effort: M · Risk: Medium
   - **Issue:** `useRoom` lives in RoomShell (`client/RoomShell.tsx:49`), so on a cold link or a refresh the WebSocket only opens after the entry chunk, then RoomShell plus framer-motion (38.7 KB gz, pulled in by `Toasts`), then a render. Lobby and Table only start downloading when RoomShell mounts (`client/RoomShell.tsx:20-24`, `client/RoomShell.tsx:47`). Measured on slow 4G: entry JS done 882 ms → `new WebSocket` 1,372 ms → Lobby chunk 1,568 ms. On desktop: entry 217 ms → socket 542 ms.

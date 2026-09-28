@@ -69,9 +69,39 @@ export default {
       return env.ASSETS.fetch(request);
     }
     const assetUrl = new URL(path + url.search, url.origin);
-    return env.ASSETS.fetch(new Request(assetUrl, request));
+    return serveAsset(env, new Request(assetUrl, request), path);
   },
 } satisfies ExportedHandler<Env>;
+
+/** Everything under /assets/ has a content hash in its name, so it never changes. */
+const IMMUTABLE = 'public, max-age=31536000, immutable';
+
+/**
+ * The Assets binding answers with `max-age=0, must-revalidate` for everything,
+ * and `_headers` does not apply once the Worker runs first — so the hashed
+ * build output would be revalidated on every visit. index.html and the SPA
+ * routes keep that default, which is right for them.
+ */
+async function serveAsset(env: Env, request: Request, path: string): Promise<Response> {
+  const response = await env.ASSETS.fetch(request);
+  if (!path.startsWith('/assets/')) return response;
+
+  // An unknown /assets/ path gets the SPA fallback — index.html. That is a
+  // chunk from an older deploy, typically, and it has to be a real 404: a
+  // module served as HTML fails obscurely, and must never be cached for a year.
+  if (response.headers.get('Content-Type')?.startsWith('text/html')) {
+    return new Response('Not found.', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  }
+  if (response.status !== 200 && response.status !== 304) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', IMMUTABLE);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 async function createRoom(env: Env): Promise<Response> {
   for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
