@@ -1,4 +1,4 @@
-import { SELF } from 'cloudflare:test';
+import { env, runInDurableObject, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { BASE_PATH } from '../shared/base';
 import type { PublicRoom } from '../shared/types';
@@ -461,5 +461,42 @@ describe('chat', () => {
       'the legacy chat frame',
     );
     expect(update.room.code).toBe(code);
+  });
+});
+
+describe('storage', () => {
+  /** Records every storage write the room makes from here on. */
+  async function recordWrites(code: string): Promise<string[]> {
+    const writes: string[] = [];
+    const stub = env.ROOM.get(env.ROOM.idFromName(code));
+    await runInDurableObject(stub, (_room, state) => {
+      const storage = state.storage as unknown as Record<string, (...args: unknown[]) => unknown>;
+      for (const method of ['put', 'delete', 'deleteAll', 'setAlarm', 'deleteAlarm']) {
+        const original = storage[method].bind(storage);
+        storage[method] = (...args: unknown[]) => {
+          writes.push(method);
+          return original(...args);
+        };
+      }
+    });
+    return writes;
+  }
+
+  it('writes a move once, without rewriting an alarm that did not change', async () => {
+    const { code, host, guest } = await startedGame();
+    const writes = await recordWrites(code);
+    const room = host.room();
+    const actor = room.players[room.turn].id === room.youId ? host : guest;
+    const view = actor.room();
+
+    if (view.moves.playable.length > 0) {
+      actor.send({ t: 'intent', intent: { type: 'PLAY_CARD', cardId: view.moves.playable[0] } });
+      await host.settled((r) => r.discardCount === room.discardCount + 1, 'card on the pile');
+    } else {
+      actor.send({ t: 'intent', intent: { type: 'DRAW' } });
+      await host.settled((r) => r.drawCount < room.drawCount, 'a card drawn');
+    }
+
+    expect(writes).toEqual(['put']);
   });
 });
