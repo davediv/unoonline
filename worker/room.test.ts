@@ -178,6 +178,27 @@ describe('joining', () => {
     expect(room.players.map((p) => p.name)).toEqual(['Maya', 'Maya 2']);
   });
 
+  it('creates a new room on the way in when asked, and seats its creator as host', async () => {
+    const host = await Client.open('CRTEAB', { name: 'Maya', create: '1' });
+    const welcome = await host.welcome();
+    expect(welcome.spectator).toBe(false);
+    expect(welcome.room.code).toBe('CRTEAB');
+    expect(welcome.room.hostId).toBe(welcome.youId);
+
+    const info = await SELF.fetch(`${ORIGIN}/api/rooms/CRTEAB`);
+    expect(((await info.json()) as { exists: boolean }).exists).toBe(true);
+  });
+
+  it('joins an existing room as usual when asked to create it', async () => {
+    const code = await createRoom();
+    const host = await Client.open(code, { name: 'Maya' });
+    const hostWelcome = await host.welcome();
+    const guest = await Client.open(code, { name: 'Sam', create: '1' });
+    await guest.welcome();
+    const room = await host.settled((r) => r.players.length === 2, 'two players');
+    expect(room.hostId).toBe(hostWelcome.youId);
+  });
+
   it('refuses a room code that does not exist, with a message rather than a silent drop', async () => {
     const client = await Client.open('QQQQQQ');
     const error = await client.waitFor<Extract<ServerMessage, { t: 'error' }>>(

@@ -35,6 +35,7 @@ import {
   cleanName,
   createRoomState,
   makeBot,
+  normalizeRoomCode,
   randomNickname,
   seatPlayer,
   unseatPlayer,
@@ -130,7 +131,11 @@ export class Room extends DurableObject<Env> {
   async createIfAbsent(code: string, rules?: Partial<RuleSet>): Promise<boolean> {
     if (this.room) return false;
     this.room = createRoomState(code, rules);
+    // Nobody is in it yet. If nobody ever arrives, the cleanup deadline
+    // deletes it, the same as a room everyone has left.
+    this.schedule(Date.now());
     await this.persist();
+    await this.armAlarm();
     return true;
   }
 
@@ -167,6 +172,14 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
+
+    if (!this.room && url.searchParams.get('create') === '1') {
+      // Create and join in one trip: the room is made by the socket that is
+      // about to sit in it, instead of by a request beforehand. The Worker
+      // routed here by this code, so it is this object's own name.
+      const code = normalizeRoomCode(url.searchParams.get('room') ?? '');
+      if (code) this.room = createRoomState(code);
+    }
 
     if (!this.room) {
       // A code nobody ever created, or a room that has since been cleaned up.

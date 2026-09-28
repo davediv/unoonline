@@ -262,7 +262,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - The backoff now resets on `welcome` rather than on `open`.
     - Pings are still the runtime-answered `{"t":"ping"}`, so the room stays hibernated.
 
-- [ ] **PERF-10 — Create the room during the WebSocket upgrade** · Priority: **Medium** · Effort: M · Risk: Medium
+- [x] **PERF-10 — Create the room during the WebSocket upgrade** · Priority: **Medium** · Effort: M · Risk: Medium · done 2026-09-29
   - **Issue:** Create is two serial trips:
     1. `POST /api/rooms` (`client/screens/Landing.tsx:56`, `worker/index.ts:76-88`). Median 754 ms (n = 13), max 9.8 s, dominated by the first `idFromName` access creating a new Durable Object.
     2. A separate WebSocket handshake to that now-warm object: 125–230 ms measured, about 3 round trips on a real mobile link.
@@ -278,7 +278,17 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `worker/index.ts`, `worker/room.ts`, `worker/room.test.ts`, `client/App.tsx`, `client/screens/Landing.tsx`, `client/lib/useRoom.ts`
   - **Depends on:** PERF-03
   - **Measure:** Playwright create timeline, median of 3: click → `lobby`.
-  - **Before → After:** <filled in when implemented>
+  - **As built (differs from the plan above):**
+    - The client picks the code (`makeRoomCode`, as the Worker did) and connects to `/ws?room=CODE&create=1`.
+    - The Durable Object creates itself when it does not exist yet, then seats the caller. That is one hop, with no extra Worker call.
+    - Retries are idempotent: `create=1` on an existing room just joins it, and it is only sent until the first `welcome`.
+    - A code that is already taken (about N live rooms in 1.07 billion) therefore joins that room, as typing it in would.
+    - `POST /api/rooms` stays for tabs opened before the deploy, and now arms the cleanup alarm, so unjoined rooms no longer pile up.
+    - Two worker tests added: create-on-connect seats the creator as host, and `create=1` on an existing room joins it. All 23 worker tests and 127 engine tests pass.
+  - **Before → After:** local production build, A/B against the PERF-09 build, 6 runs each.
+    - Create → lobby: desktop 58 → **32 ms**, slow 4G + 4× CPU 375 → **213 ms** (medians).
+    - The socket now opens 13–23 ms after the click instead of after the POST (20–285 ms locally).
+    - In production the POST (median 754 ms) is mostly first-time room creation, which now happens inside the upgrade, so the saving there is the separate POST round trip plus the serial handshake.
 
 - [ ] **PERF-11 — Skip Durable Object writes that change nothing** · Priority: **Low** · Effort: S · Risk: Low
   - **Issue:**

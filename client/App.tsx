@@ -49,6 +49,8 @@ if (codeFromPath()) prepareRoom();
 export default function App() {
   const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
   const [code, setCode] = useState<string | null>(() => codeFromPath());
+  /** Whether this visit is making the room, rather than joining one. */
+  const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const prefsRef = useRef(prefs);
 
@@ -89,7 +91,10 @@ export default function App() {
 
   // Back and forward should move between the landing page and a room.
   useEffect(() => {
-    const onPop = () => setCode(codeFromPath());
+    const onPop = () => {
+      setCode(codeFromPath());
+      setCreating(false);
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -111,15 +116,17 @@ export default function App() {
 
   const store = useMemo(() => ({ prefs, update }), [prefs, update]);
 
-  const enterRoom = useCallback((next: string) => {
+  const enterRoom = useCallback((next: string, options?: { create?: boolean }) => {
     setNotice(null);
     history.pushState({}, '', withBase(`/r/${next}`));
     setCode(next);
+    setCreating(options?.create === true);
   }, []);
 
   const leaveRoom = useCallback((message?: string) => {
     history.pushState({}, '', BASE_URL);
     setCode(null);
+    setCreating(false);
     setNotice(message ?? null);
   }, []);
 
@@ -129,6 +136,7 @@ export default function App() {
         <Room
           key={code}
           code={code}
+          create={creating}
           initialName={prefs.name}
           initialAvatar={prefs.avatar}
           onLeave={leaveRoom}
@@ -142,6 +150,7 @@ export default function App() {
 
 interface RoomProps {
   code: string;
+  create: boolean;
   initialName: string;
   initialAvatar: number;
   onLeave: (message?: string) => void;
@@ -152,12 +161,15 @@ interface RoomProps {
  * a room link the socket is already connecting while RoomShell downloads.
  * Keyed by code, so leaving or switching rooms starts from nothing.
  */
-function Room({ code, initialName, initialAvatar, onLeave }: RoomProps) {
-  const [{ name, avatar }] = useState(() => ({
+function Room({ code, create, initialName, initialAvatar, onLeave }: RoomProps) {
+  const [{ name, avatar, creating }] = useState(() => ({
     name: initialName.trim() || randomNickname(cryptoRng),
     avatar: initialAvatar,
+    creating: create,
   }));
-  const connection = useRoom(useMemo(() => ({ code, name, avatar }), [avatar, code, name]));
+  const connection = useRoom(
+    useMemo(() => ({ code, name, avatar, create: creating }), [avatar, code, creating, name]),
+  );
 
   // A plain loading screen, not a Suspense fallback, while the chunk is on its
   // way: React keeps a fallback up for at least 300 ms once it has shown one.

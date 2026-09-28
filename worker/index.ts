@@ -5,6 +5,7 @@
  *   POST /api/rooms        create a room, get a code back
  *   GET  /api/rooms/:code  is that code real, and can I sit down?
  *   GET  /ws?room=CODE     upgrade to that room's Durable Object
+ *                          (&create=1 makes the room first if it is new)
  *
  * Single origin, so there is no CORS anywhere in this project.
  *
