@@ -235,7 +235,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - Card removal is unchanged, as intended: 138 → 134–146 ms.
     - Double tap (4 turns): before, **2** intents per tap and a "That card is not in your hand." toast every time; after, **1** intent and no toast.
 
-- [ ] **PERF-09 — Detect dead sockets and reconnect as soon as the network is back** · Priority: **Medium** · Effort: M · Risk: Medium
+- [x] **PERF-09 — Detect dead sockets and reconnect as soon as the network is back** · Priority: **Medium** · Effort: M · Risk: Medium · done 2026-09-29
   - **Issue:**
     - The client pings every 25 s but never checks for the pong (`client/lib/useRoom.ts:57`, `client/lib/useRoom.ts:123-126`, `client/lib/useRoom.ts:179-180`).
     - There are no `online` or `visibilitychange` listeners.
@@ -256,7 +256,11 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Measure:** Playwright:
     - Close the socket 5 times to reach the 8 s backoff, dispatch `online`, and time until the next `new WebSocket`.
     - Swallow pongs, and time until the forced reconnect.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build, A/B against the PERF-06 build, 2 runs each.
+    - Network back (14 s offline, so the backoff had grown), then `online`: next socket 3.1–4.1 s later → **2–3 ms**, and welcome 3.1–4.1 s → **25 ms**.
+    - Dead socket (open, but nothing it receives arrives): before, never replaced within 30 s; after, detected and replaced in **10.6 s** (the 10 s pong watchdog), welcome at 10.6 s.
+    - The backoff now resets on `welcome` rather than on `open`.
+    - Pings are still the runtime-answered `{"t":"ping"}`, so the room stays hibernated.
 
 - [ ] **PERF-10 — Create the room during the WebSocket upgrade** · Priority: **Medium** · Effort: M · Risk: Medium
   - **Issue:** Create is two serial trips:
