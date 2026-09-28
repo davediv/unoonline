@@ -1,52 +1,30 @@
 /**
- * The room-only shell: connection lifecycle, lazy screen loading, and toasts.
+ * The room-only shell: screens, toasts, and what to say about the connection.
  * It lives behind a dynamic import so the landing route does not pay for the
- * WebSocket client, game table, or animation runtime.
+ * game table or the animation runtime. The connection itself is opened by
+ * `App` before this chunk arrives, so the socket and the download overlap.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef } from 'react';
 import { Toasts } from './components/Toasts';
-import { preloadable } from './lib/preloadable';
 import { toastText, useToasts } from './lib/toasts';
-import { useRoom } from './lib/useRoom';
-import { randomNickname } from '../shared/room';
-import { cryptoRng } from '../shared/rng';
+import type { RoomConnection } from './lib/useRoom';
+import { lobby, table } from './roomScreens';
 
-const lobby = preloadable(() => import('./screens/Lobby').then((module) => module.Lobby));
-const table = preloadable(() => import('./screens/Table').then((module) => module.Table));
 const Lobby = lobby.Component;
 const Table = table.Component;
 
-function preloadRoomScreens(): void {
-  void Promise.all([lobby.preload(), table.preload()]).catch(() => {
-    // The lazy boundary remains the source of truth for an actual navigation.
-  });
-}
-
 interface RoomShellProps {
   code: string;
-  initialName: string;
-  initialAvatar: number;
+  connection: RoomConnection;
   onLeave: (message?: string) => void;
 }
 
-export default function RoomShell({
-  code,
-  initialName,
-  initialAvatar,
-  onLeave,
-}: RoomShellProps) {
-  const [{ name, avatar }] = useState(() => ({
-    name: initialName.trim() || randomNickname(cryptoRng),
-    avatar: initialAvatar,
-  }));
+export default function RoomShell({ code, connection, onLeave }: RoomShellProps) {
   const { toasts, push, dismiss } = useToasts();
   /** Whether we were mid-reconnect, so "Back in." only fires after a drop. */
   const droppedRef = useRef(false);
 
-  useEffect(preloadRoomScreens, []);
-
-  const connection = useRoom(useMemo(() => ({ code, name, avatar }), [avatar, code, name]));
   const { status, room, chat, youId, spectator, error, pulse, clockSkew, send } = connection;
 
   // Every rejection the server sends becomes a sentence.
