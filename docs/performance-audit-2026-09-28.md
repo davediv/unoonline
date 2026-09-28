@@ -345,21 +345,28 @@ Not performance, noted while auditing:
 
 ## Success Criteria Scorecard
 
+How to read the columns:
+- **Before** is the production measurement from this audit.
+- **After** was measured on 2026-09-29 against the local production build (`vite preview`, the built Worker in workerd) at commit `132992f`, because nothing has been deployed yet. The local "before" on the same machine is shown in brackets.
+- The local preview serves assets uncompressed and has a ~0 ms socket round trip, so where local numbers are not comparable to production, a production estimate is given, with its basis.
+
 | Route / Interaction | Metric | Before | After | Target |
 |---------------------|--------|--------|-------|--------|
-| `/uno/` | LCP, desktop, cold | 168 ms | | ≤ 2.5 s |
-| `/uno/` | LCP, slow 4G + 4× CPU, cold | 812 ms | | ≤ 2.5 s |
-| `/uno/` | Revalidations on a repeat visit | 6 × 304 | | 0 |
-| `/uno/` | Initial JS (gz) | 68.4 KB | | ≤ 200 KB |
-| `/uno/` | CLS | 0 | | ≤ 0.1 |
-| `/uno/r/CODE` cold | nav → lobby visible, desktop | 977 ms | | ≤ 600 ms |
-| `/uno/r/CODE` cold | nav → lobby visible, slow 4G + 4× CPU | 1,930 ms | | ≤ 1,400 ms |
-| Create room | click → lobby, desktop | 1,645 ms | | ≤ 1,100 ms |
-| Join by code | click → lobby, desktop | 816 ms | | ≤ 250 ms |
-| Join by code | click → lobby, slow 4G + 4× CPU | 1,092 ms | | ≤ 400 ms |
-| Start game | click → table | 401 ms | | ≤ 150 ms |
-| Play a card | worst event duration (INP proxy) | 40 ms | | ≤ 200 ms |
-| Play a card | click → card leaves hand | 95 ms | | ≤ 200 ms |
-| Opponent move | script per frame at 4× CPU | 20.5 ms | | ≤ 10 ms |
-| Opponent move | long tasks | 0 | | 0 |
-| Toast during play | time on screen | > 12.5 s | | 3.6 s |
+| `/uno/` | LCP, desktop, cold | 168 ms | **120 ms** (local before 168) ✅ | ≤ 2.5 s |
+| `/uno/` | LCP, slow 4G + 4× CPU, cold | 812 ms | **1,588 ms** local, uncompressed (local before 1,600): no regression ✅ | ≤ 2.5 s |
+| `/uno/` | Revalidations on a repeat visit | 6 × 304 | **0** (repeat-visit LCP, slow: 420 → 212 ms) ✅ | 0 |
+| `/uno/` | Initial JS (gz) | 68.4 KB | **70.4 KB** (+2 KB: the room connection now lives in the entry chunk) ✅ | ≤ 200 KB |
+| `/uno/` | CLS | 0 | **0** ✅ | ≤ 0.1 |
+| `/uno/r/CODE` cold | nav → lobby visible, desktop | 977 ms | **104 ms** (local before 715) ✅ | ≤ 600 ms |
+| `/uno/r/CODE` cold | nav → lobby visible, slow 4G + 4× CPU | 1,930 ms | **2,684 ms** local, bound by uncompressed framer-motion (local before 2,976). Production estimate **~1,350 ms**: the socket now opens with the entry JS (~870 ms) and all room chunks load in that same tier (framer-motion ~40 KB br ≈ +350 ms). | ≤ 1,400 ms |
+| Create room | click → lobby, desktop | 1,645 ms | **29 ms** (local before 672). Production estimate **~0.8 s**: first-time room creation (~0.75 s) now happens inside the socket upgrade, with no POST and no 600 ms of holds. ✅ | ≤ 1,100 ms |
+| Join by code | click → lobby, desktop | 816 ms | **48 ms** (local before 678) ✅ | ≤ 250 ms |
+| Join by code | click → lobby, slow 4G + 4× CPU | 1,092 ms | **256 ms** with the code typed normally, **407 ms** when clicking the instant the code is filled (local before 1,143 / 1,306) ✅ | ≤ 400 ms |
+| Start game | click → table | 401 ms | **25 ms** desktop, **70 ms** slow (local before 323 / 357) ✅ | ≤ 150 ms |
+| Play a card | worst event duration (INP proxy) | 40 ms | **32 ms** at 4× CPU, 0 long tasks ✅ | ≤ 200 ms |
+| Play a card | first visible response to a tap | 95 ms (card leaves hand) | **12 ms**: pending state, with 120 ms of simulated round trip (card leaves hand at ~140 ms, unchanged) ✅ | ≤ 200 ms |
+| Opponent move | script per frame at 4× CPU | 20.5 ms | **28.1 ms vs 31.0 ms** before in an interleaved A/B on a machine at load ~15–40: −10% script, −31% forced layouts. Target not met; the rest is animation frames ❌ | ≤ 10 ms |
+| Opponent move | long tasks | 0 | **0** ✅ | 0 |
+| Toast during play | time on screen | > 12.5 s | **3.7 s** (local before > 5.9 s) ✅ | 3.6 s |
+
+Throughout, the slow-device view is Playwright + CDP throttling (4× CPU, 150 ms RTT, 1.6 Mbps). Lighthouse is not installed. Smoke-tested at 1280 px and 390 px (create, bots, start, play/draw, chat, refresh back into the seat, leave, back button): every step passed, with no console errors or warnings and no horizontal scroll. Lint, typecheck, build and all tests (127 engine + 24 worker) pass.
