@@ -137,7 +137,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - `/uno/`, SPA routes and the favicon are unchanged (`max-age=0, must-revalidate`).
     - Repeat visit to `/uno/`: 304s 6 → **0**, LCP 172 → **48 ms** (desktop) and 420 → **236 ms** (slow 4G + 4× CPU).
 
-- [ ] **PERF-03 — Open the socket and fetch every room chunk as soon as a room URL boots** · Priority: **High** · Effort: M · Risk: Medium
+- [x] **PERF-03 — Open the socket and fetch every room chunk as soon as a room URL boots** · Priority: **High** · Effort: M · Risk: Medium · done 2026-09-29
   - **Issue:** `useRoom` lives in RoomShell (`client/RoomShell.tsx:49`), so on a cold link or a refresh the WebSocket only opens after the entry chunk, then RoomShell plus framer-motion (38.7 KB gz, pulled in by `Toasts`), then a render. Lobby and Table only start downloading when RoomShell mounts (`client/RoomShell.tsx:20-24`, `client/RoomShell.tsx:47`). Measured on slow 4G: entry JS done 882 ms → `new WebSocket` 1,372 ms → Lobby chunk 1,568 ms. On desktop: entry 217 ms → socket 542 ms.
   - **Why it matters:** the room link is what people send each other, and it is the slowest route (1.93 s to the lobby on slow 4G). The socket handshake is the longest single step on real mobile links, and it runs after the JS instead of alongside it.
   - **Optimization:**
@@ -146,10 +146,15 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - When `codeFromPath()` finds a code at boot, call `prepareRoom()` at module start, so RoomShell, Lobby, Table and framer-motion download in one tier while the socket connects.
     - The socket, token and reconnect logic stay the same.
   - **Expected impact:** after PERF-01, cold link → lobby drops about −300 ms on desktop (~670 → ~360 ms) and about −250 ms on slow 4G (~1,610 → ~1,360 ms, now limited by the framer-motion download). On a real slow-4G link the ~450 ms socket handshake overlaps the JS download entirely (estimated). The entry chunk grows by about 1 KB gz.
-  - **Files:** `client/App.tsx`, `client/RoomShell.tsx`, `client/lib/useRoom.ts`
+  - **Files:** `client/App.tsx`, `client/RoomShell.tsx`, `client/roomScreens.ts` (new: the Lobby/Table preloaders, so RoomShell counts as loaded only with both screens), `client/lib/preloadable.ts` (`isLoaded`). `client/lib/useRoom.ts` needed no change.
   - **Depends on:** PERF-01
   - **Measure:** Playwright cold-link timeline, median of 3, desktop and slow: nav → `wsNew` and nav → `lobby`.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build, median of 3 (before = after PERF-01).
+    - Cold link desktop: nav → lobby 691 → **175 ms**; socket opens at 371 → **101 ms**.
+    - Cold link slow 4G + 4× CPU: nav → lobby 2,990 → **2,692 ms**; socket opens at 2,432 → **1,651 ms**. The lobby now waits only on framer-motion, which the local preview serves uncompressed (120 KB, done at ~2,640 ms).
+    - Suspense fallbacks on a cold link: 3/3 → **0/3**. The room shows a plain loading screen until the chunks are in, so there is no 300 ms hold.
+    - Join desktop 130 → **62 ms**. Slow join 1,337 → **1,123 ms** and slow create 1,272 → **1,115 ms**; there the socket opens ~850 ms earlier, right after the API call.
+    - Cost: initial JS 68.4 → 69.7 KB gz (the connection code moved into the entry chunk).
 
 - [ ] **PERF-04 — Stop incoming frames from restarting the toast timer** · Priority: **High** · Effort: S · Risk: Low
   - **Issue:** `useToasts` returns a new `push` and `dismiss` on every render (`client/lib/toasts.ts:52-58`). RoomShell passes `dismiss` as `onExpire` (`client/RoomShell.tsx:118`), and each `ToastRow`'s timer effect depends on it (`client/components/Toasts.tsx:27-30`). Every RoomShell render therefore clears and restarts the 3.6 s timer, and RoomShell renders on every WebSocket frame. Each row is also a framer `layout` element, so it is re-measured on each of those renders.

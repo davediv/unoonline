@@ -11,19 +11,26 @@ import { PrefsContext } from './lib/prefsContext';
 import { loadPrefs, savePrefs, type Prefs } from './lib/prefs';
 import { preloadable } from './lib/preloadable';
 import { setMuted, unlockAudio } from './lib/sound';
+import { useRoom } from './lib/useRoom';
 import { BASE_URL, stripBase, withBase } from '../shared/base';
-import { normalizeRoomCode } from '../shared/room';
+import { normalizeRoomCode, randomNickname } from '../shared/room';
+import { cryptoRng } from '../shared/rng';
 
-const roomShell = preloadable(() => import('./RoomShell').then((module) => module.default));
+/**
+ * RoomShell counts as loaded only once both of its screens are too, so the
+ * lobby and the table never suspend on the way in.
+ */
+const roomShell = preloadable(() =>
+  Promise.all([
+    import('./RoomShell'),
+    import('./roomScreens').then((screens) => screens.preloadRoomScreens()),
+  ]).then(([module]) => module.default),
+);
 const RoomShell = roomShell.Component;
 
 /** Start room-only code while the create/join request is already in flight. */
 function prepareRoom(): void {
-  void Promise.all([
-    roomShell.preload(),
-    import('./screens/Lobby'),
-    import('./screens/Table'),
-  ]).catch(() => {
+  void roomShell.preload().catch(() => {
     // Opportunistic: React.lazy will surface a real load failure if we enter.
   });
 }
@@ -34,6 +41,10 @@ function codeFromPath(): string | null {
   const match = path?.match(/^\/r\/([^/]+)\/?$/);
   return match ? normalizeRoomCode(match[1]) : null;
 }
+
+// Arriving on a room link: fetch the room's code alongside the socket, which
+// `Room` opens on its first render, rather than one after the other.
+if (codeFromPath()) prepareRoom();
 
 export default function App() {
   const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
@@ -100,19 +111,59 @@ export default function App() {
   return (
     <PrefsContext.Provider value={store}>
       {code ? (
-        <Suspense fallback={<RoomLoading code={code} onLeave={leaveRoom} />}>
-          <RoomShell
-            key={code}
-            code={code}
-            initialName={prefs.name}
-            initialAvatar={prefs.avatar}
-            onLeave={leaveRoom}
-          />
-        </Suspense>
+        <Room
+          key={code}
+          code={code}
+          initialName={prefs.name}
+          initialAvatar={prefs.avatar}
+          onLeave={leaveRoom}
+        />
       ) : (
         <Landing onEnter={enterRoom} onPrepareRoom={prepareRoom} notice={notice} />
       )}
     </PrefsContext.Provider>
+  );
+}
+
+interface RoomProps {
+  code: string;
+  initialName: string;
+  initialAvatar: number;
+  onLeave: (message?: string) => void;
+}
+
+/**
+ * One visit to one room. The connection opens here, in the entry chunk, so on
+ * a room link the socket is already connecting while RoomShell downloads.
+ * Keyed by code, so leaving or switching rooms starts from nothing.
+ */
+function Room({ code, initialName, initialAvatar, onLeave }: RoomProps) {
+  const [{ name, avatar }] = useState(() => ({
+    name: initialName.trim() || randomNickname(cryptoRng),
+    avatar: initialAvatar,
+  }));
+  const connection = useRoom(useMemo(() => ({ code, name, avatar }), [avatar, code, name]));
+
+  // A plain loading screen, not a Suspense fallback, while the chunk is on its
+  // way: React keeps a fallback up for at least 300 ms once it has shown one.
+  const [ready, setReady] = useState(roomShell.isLoaded);
+  useEffect(() => {
+    if (ready) return;
+    let live = true;
+    const settle = () => {
+      if (live) setReady(true);
+    };
+    roomShell.preload().then(settle, settle);
+    return () => {
+      live = false;
+    };
+  }, [ready]);
+
+  if (!ready) return <RoomLoading code={code} onLeave={onLeave} />;
+  return (
+    <Suspense fallback={<RoomLoading code={code} onLeave={onLeave} />}>
+      <RoomShell code={code} connection={connection} onLeave={onLeave} />
+    </Suspense>
   );
 }
 

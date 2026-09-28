@@ -38,5 +38,5 @@ export function preloadable<P extends object>(load: () => Promise<ComponentType<
     return createElement(loaded ?? Lazy, props);
   }
 
-  return { Component: Preloadable, preload };
+  return { Component: Preloadable, preload, isLoaded: () => loaded !== null };
 }
