@@ -156,7 +156,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - Join desktop 130 → **62 ms**. Slow join 1,337 → **1,123 ms** and slow create 1,272 → **1,115 ms**; there the socket opens ~850 ms earlier, right after the API call.
     - Cost: initial JS 68.4 → 69.7 KB gz (the connection code moved into the entry chunk).
 
-- [ ] **PERF-04 — Stop incoming frames from restarting the toast timer** · Priority: **High** · Effort: S · Risk: Low
+- [x] **PERF-04 — Stop incoming frames from restarting the toast timer** · Priority: **High** · Effort: S · Risk: Low · done 2026-09-29
   - **Issue:** `useToasts` returns a new `push` and `dismiss` on every render (`client/lib/toasts.ts:52-58`). RoomShell passes `dismiss` as `onExpire` (`client/RoomShell.tsx:118`), and each `ToastRow`'s timer effect depends on it (`client/components/Toasts.tsx:27-30`). Every RoomShell render therefore clears and restarts the 3.6 s timer, and RoomShell renders on every WebSocket frame. Each row is also a framer `layout` element, so it is re-measured on each of those renders.
   - **Why it matters:** measured live, a "Back in." toast stayed on screen for more than 12.5 s across 9 bot moves instead of 3.6 s. Toasts are `pointer-events-auto` and sit over the header rail (`client/components/Toasts.tsx:13`, `client/components/Toasts.tsx:39`), so Leave and Chat are covered for as long as other players keep moving.
   - **Optimization:** wrap `push` and `dismiss` in `useCallback` (`setToasts` is already stable), and wrap `Toasts` in `memo`.
@@ -164,7 +164,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `client/lib/toasts.ts`, `client/components/Toasts.tsx`
   - **Depends on:** —
   - **Measure:** Playwright: during a bot game, drop the socket, then time the `role=status` "Back in." toast until it is hidden while frames keep arriving.
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** "Back in." toast during bot play went from > 5.9 s (local; > 12.5 s in production) to **4.0 s** on the local production build, with 3 frames arriving while it showed. That is the 3.6 s timer, plus the 0.22 s exit animation, plus polling granularity.
 
 - [ ] **PERF-05 — Warm the join path before the click** · Priority: **High** · Effort: S · Risk: Low
   - **Issue:** Join sends `GET /api/rooms/:code` only on submit (`client/screens/Landing.tsx:68-93`). The room chunks (57.6 KB gz) also start only on click (`client/App.tsx:20-28`, called from `client/screens/Landing.tsx:75`). On slow 4G the GET takes 193–224 ms and framer-motion lands at ~525 ms, so the socket cannot start before ~540 ms (join → lobby 1,092 ms).

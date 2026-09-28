@@ -4,10 +4,16 @@
  */
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { memo, useEffect } from 'react';
 import type { Toast } from '../lib/toasts';
 
-export function Toasts({ toasts, onExpire }: { toasts: Toast[]; onExpire: (id: number) => void }) {
+export const Toasts = memo(function Toasts({
+  toasts,
+  onExpire,
+}: {
+  toasts: Toast[];
+  onExpire: (id: number) => void;
+}) {
   return (
     <div
       className="pointer-events-none fixed inset-x-0 top-3 z-50 flex flex-col items-center gap-2 px-3"
@@ -21,7 +27,7 @@ export function Toasts({ toasts, onExpire }: { toasts: Toast[]; onExpire: (id: n
       </AnimatePresence>
     </div>
   );
-}
+});
 
 function ToastRow({ toast, onExpire }: { toast: Toast; onExpire: (id: number) => void }) {
   useEffect(() => {
