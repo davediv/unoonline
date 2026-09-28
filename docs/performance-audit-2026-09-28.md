@@ -182,7 +182,7 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
     - **Original script** (click immediately after filling, so the check cannot start first): slow join 1,123 → **440 ms**, desktop 62 → 66 ms (unchanged).
     - Idle prefetch also helps create: slow create → lobby 1,115 → **400 ms**.
 
-- [ ] **PERF-06 — Recover from stale chunks after a deploy instead of going blank** · Priority: **Medium** · Effort: S · Risk: Low
+- [x] **PERF-06 — Recover from stale chunks after a deploy instead of going blank** · Priority: **Medium** · Effort: S · Risk: Low · done 2026-09-29
   - **Issue:** there is no error boundary and no `vite:preloadError` handler anywhere in `client/`. A tab loaded before a deploy still references the old hashed chunks. On Create or Join, `import('./RoomShell-<old>.js')` fails (today it even receives HTML), `React.lazy` throws, and the page goes blank.
   - **Why it matters:** every deploy blanks the primary action for anyone who had the game open, with no way back except a manual reload.
   - **Optimization:** in `client/main.tsx`, listen for `vite:preloadError` and reload once, guarded by a `sessionStorage` flag so a real outage cannot loop. The URL is already `/uno/r/CODE` by then, so the reload lands in the room.
@@ -190,7 +190,11 @@ Headers: every hashed asset is served `Cache-Control: public, max-age=0, must-re
   - **Files:** `client/main.tsx`
   - **Depends on:** PERF-02
   - **Measure:** Playwright: route the first `RoomShell-*.js` request to a 404, click Create, then assert the lobby appears after exactly one reload (before: `#root` stays empty).
-  - **Before → After:** <filled in when implemented>
+  - **Before → After:** local production build, `RoomShell-*.js` answered with 404 until the page reloads.
+    - Before: Create left `/uno/r/CODE` with an empty `#root`. Browsers never retry a failed module import, so the page stayed blank.
+    - After: 1 automatic reload, then the lobby in **572 / 1,259 / 1,553 ms** after the click (3 runs).
+    - With the chunk missing permanently: exactly 1 reload, then it stops (no loop).
+    - It only reloads on a room URL, so a failed idle prefetch on Landing never reloads the page under the player.
 
 - [ ] **PERF-07 — Cut the work each incoming frame does on the table** · Priority: **Medium** · Effort: M · Risk: Medium
   - **Issue:** each `sync` frame replaces `room` with a new object from `JSON.parse` (`client/lib/useRoom.ts:147-149`) and moves `clockSkew` by a few ms, so almost the whole table re-renders on every move:
