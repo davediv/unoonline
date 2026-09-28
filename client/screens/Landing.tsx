@@ -6,7 +6,7 @@
  * screen is quiet by comparison.
  */
 
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { CardFace } from '../components/Card';
 import { Avatar } from '../components/Avatar';
 import { withBase } from '../../shared/base';
@@ -24,6 +24,38 @@ const HERO: Card[] = [
   { id: 'hero-5', kind: 'draw2', color: 'yellow', digit: null },
 ];
 
+interface RoomInfo {
+  exists: boolean;
+}
+
+/** How long a room check made while typing is trusted when Join follows. */
+const LOOKUP_TTL_MS = 30_000;
+
+let lookedUp: { code: string; at: number; info: Promise<RoomInfo> } | null = null;
+
+/**
+ * Is there a room with this code? The answer is started as soon as the code
+ * is complete and reused by Join, so the click does not wait on it. Only a
+ * "yes" is kept: a code that did not exist is asked about again.
+ */
+function lookUpRoom(code: string): Promise<RoomInfo> {
+  if (lookedUp && lookedUp.code === code && Date.now() - lookedUp.at < LOOKUP_TTL_MS) {
+    return lookedUp.info;
+  }
+  const info = fetch(withBase(`/api/rooms/${code}`)).then(
+    (response) => response.json() as Promise<RoomInfo>,
+  );
+  const entry = { code, at: Date.now(), info };
+  lookedUp = entry;
+  const forget = () => {
+    if (lookedUp === entry) lookedUp = null;
+  };
+  info.then((answer) => {
+    if (!answer.exists) forget();
+  }, forget);
+  return info;
+}
+
 interface LandingProps {
   onEnter: (code: string) => void;
   onPrepareRoom: () => void;
@@ -38,6 +70,18 @@ export function Landing({ onEnter, onPrepareRoom, notice }: LandingProps) {
   const [pickingAvatar, setPickingAvatar] = useState(false);
 
   const name = prefs.name;
+
+  // Check a complete code while the player is still reaching for Join.
+  useEffect(() => {
+    const clean = normalizeRoomCode(code);
+    if (!clean) return;
+    const id = window.setTimeout(() => {
+      lookUpRoom(clean).catch(() => {
+        // Join asks again and reports the failure.
+      });
+    }, 150);
+    return () => window.clearTimeout(id);
+  }, [code]);
 
   const ensureName = (): string => {
     if (name.trim()) return name.trim();
@@ -77,8 +121,7 @@ export function Landing({ onEnter, onPrepareRoom, notice }: LandingProps) {
     setProblem(null);
     setBusy('join');
     try {
-      const response = await fetch(withBase(`/api/rooms/${clean}`));
-      const info = (await response.json()) as { exists: boolean };
+      const info = await lookUpRoom(clean);
       if (!info.exists) {
         setProblem('No room with that code. Check the letters and try again.');
         setBusy(null);
