@@ -9,11 +9,15 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CardBack, CardFace, ColorGlyph } from './Card';
-import type { Card, Color, PublicRoom } from '../../shared/types';
+import type { Card, Color } from '../../shared/types';
 import { colorLabel } from '../../shared/deck';
 
+/** Only what the piles draw, so a frame that changes nothing here skips them. */
 interface CenterPilesProps {
-  room: PublicRoom;
+  discardTop: Card | null;
+  drawCount: number;
+  activeColor: Color | null;
+  direction: 1 | -1;
   colorblind: boolean;
   canDraw: boolean;
   onDraw: () => void;
@@ -29,14 +33,17 @@ function tiltOf(id: string): number {
 }
 
 export const CenterPiles = memo(function CenterPiles({
-  room,
+  discardTop,
+  drawCount,
+  activeColor,
+  direction,
   colorblind,
   canDraw,
   onDraw,
   deckRef,
   discardRef,
 }: CenterPilesProps) {
-  const top = room.discardTop;
+  const top = discardTop;
   const [buried, setBuried] = useState<Card[]>([]);
   const lastId = useRef<string | null>(null);
 
@@ -50,7 +57,7 @@ export const CenterPiles = memo(function CenterPiles({
     lastId.current = top.id;
   }, [top]);
 
-  const color = room.activeColor;
+  const color = activeColor;
 
   return (
     <div className="flex items-center justify-center gap-4 sm:gap-9">
@@ -60,7 +67,7 @@ export const CenterPiles = memo(function CenterPiles({
           ref={deckRef as (element: HTMLButtonElement | null) => void}
           onClick={onDraw}
           disabled={!canDraw}
-          aria-label={canDraw ? `Draw a card. ${room.drawCount} left in the deck.` : `Deck: ${room.drawCount} cards left`}
+          aria-label={canDraw ? `Draw a card. ${drawCount} left in the deck.` : `Deck: ${drawCount} cards left`}
           className={`relative block w-24 transition sm:w-24 ${
             canDraw ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'
           }`}
@@ -79,7 +86,7 @@ export const CenterPiles = memo(function CenterPiles({
             <span className="absolute inset-0 rounded-xl ring-2 ring-chalk/70" aria-hidden="true" />
           )}
         </button>
-        <span className="tabular text-xs text-chalk-dim">{room.drawCount} left</span>
+        <span className="tabular text-xs text-chalk-dim">{drawCount} left</span>
       </div>
 
       {/* Discard pile */}
@@ -129,7 +136,7 @@ export const CenterPiles = memo(function CenterPiles({
       </div>
 
       {/* Which way play is going. */}
-      <DirectionMark direction={room.direction} />
+      <DirectionMark direction={direction} />
     </div>
   );
 });

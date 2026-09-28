@@ -66,6 +66,10 @@ export const Hand = memo(function Hand({
   const overlap = compact ? 0 : (CARD_WIDTH - gap) / 2;
   const step = cards.length > 1 ? Math.min(6.5, 46 / cards.length) : 0;
   const middle = (cards.length - 1) / 2;
+  // A card's slot only moves when the count, the overlap or the layout mode
+  // does (or its own index). Hover, selection and playability are transforms,
+  // so they skip the layout measurement.
+  const layoutKey = `${cards.length}|${overlap}|${compact}`;
 
   // Keeping selection here means hovering or arrowing through a hand does not
   // reconcile the table, opponents, piles, chat, and overlays around it.
@@ -138,6 +142,7 @@ export const Hand = memo(function Hand({
             arc={arc}
             rotation={compact ? 0 : offset * step}
             overlap={overlap}
+            layoutKey={layoutKey}
             onSelect={setSelected}
             onPlay={onPlay}
             onRefuse={onRefuse}
@@ -164,6 +169,7 @@ interface HandCardProps {
   arc: number;
   rotation: number;
   overlap: number;
+  layoutKey: string;
   onSelect: (index: number) => void;
   onPlay: (cardId: string) => void;
   onRefuse: (card: Card) => void;
@@ -183,6 +189,7 @@ const HandCard = memo(
     arc,
     rotation,
     overlap,
+    layoutKey,
     onSelect,
     onPlay,
     onRefuse,
@@ -190,6 +197,7 @@ const HandCard = memo(
     return (
       <motion.button
         layout={dealing ? false : 'position'}
+        layoutDependency={`${layoutKey}|${index}`}
         initial={dealing ? { y: 160, opacity: 0, rotate: 0 } : false}
         animate={{
           y: arc - (selected ? 24 : live ? 8 : 0),
@@ -244,6 +252,7 @@ const HandCard = memo(
     previous.arc === next.arc &&
     previous.rotation === next.rotation &&
     previous.overlap === next.overlap &&
+    previous.layoutKey === next.layoutKey &&
     previous.onSelect === next.onSelect &&
     previous.onPlay === next.onPlay &&
     previous.onRefuse === next.onRefuse,
