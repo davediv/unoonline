@@ -7,8 +7,9 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Landing } from './screens/Landing';
+import { RoomIdentity } from './screens/RoomIdentity';
 import { PrefsContext } from './lib/prefsContext';
-import { loadPrefs, savePrefs, type Prefs } from './lib/prefs';
+import { loadPrefs, loadToken, savePrefs, type Prefs } from './lib/prefs';
 import { preloadable } from './lib/preloadable';
 import { setMuted, unlockAudio } from './lib/sound';
 import { useRoom } from './lib/useRoom';
@@ -49,6 +50,7 @@ if (codeFromPath()) prepareRoom();
 export default function App() {
   const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
   const [code, setCode] = useState<string | null>(() => codeFromPath());
+  const [entryPending, setEntryPending] = useState(true);
   /** Whether this visit is making the room, rather than joining one. */
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,6 +96,7 @@ export default function App() {
     const onPop = () => {
       setCode(codeFromPath());
       setCreating(false);
+      setEntryPending(true);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -121,6 +124,7 @@ export default function App() {
     history.pushState({}, '', withBase(`/r/${next}`));
     setCode(next);
     setCreating(options?.create === true);
+    setEntryPending(false);
   }, []);
 
   const leaveRoom = useCallback((message?: string) => {
@@ -128,11 +132,21 @@ export default function App() {
     setCode(null);
     setCreating(false);
     setNotice(message ?? null);
+    setEntryPending(true);
   }, []);
+
+  const confirmIdentity = useCallback((name: string, avatar: number) => {
+    setPrefs((current) => ({ ...current, name, avatar }));
+    setEntryPending(false);
+  }, []);
+
+  const needsIdentity = code !== null && entryPending && !prefs.name.trim() && !loadToken(code);
 
   return (
     <PrefsContext.Provider value={store}>
-      {code ? (
+      {needsIdentity && code ? (
+        <RoomIdentity code={code} avatar={prefs.avatar} onConfirm={confirmIdentity} onLeave={leaveRoom} />
+      ) : code ? (
         <Room
           key={code}
           code={code}
