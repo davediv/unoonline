@@ -58,12 +58,12 @@ other /uno/* paths    → landing screen without changing the URL
   - **Files:** `worker/room.ts`, `client/screens/Lobby.tsx`, `client/components/Scoreboard.tsx`, `client/RoomShell.tsx`, `worker/room.test.ts`
   - **Depends on:** —
 
-- [ ] **AR-02 — Let shared-link guests set their identity before joining** · Priority: **High** · Effort: M
+- [x] **AR-02 — Let shared-link guests set their identity before joining** · done 2026-09-29 · Priority: **High** · Effort: M
   - **Issue:** `/uno/r/:code` immediately constructs `Room` with the saved name or a random nickname (`client/App.tsx:38-53,164-172`); the name/avatar inputs exist only on the landing route (`client/screens/Landing.tsx:151-201`).
   - **Why it matters:** A first-time guest cannot choose how they appear before occupying a seat, and changing the landing preference later does not rename that seat.
   - **Recommendation:** On a cold shared-link visit without a saved identity, keep the room code in the URL and show a compact name/avatar entry step before opening the socket. Preserve direct reconnect for visitors with an existing room token.
   - **Expected benefit:** Guests enter a shared room with an identity they recognize, without losing the link or their seat on reconnect.
-  - **Files:** `client/App.tsx`, `client/screens/Landing.tsx`, `client/lib/prefs.ts`
+  - **Files:** `client/App.tsx`, `client/screens/RoomIdentity.tsx`
   - **Depends on:** —
 
 - [ ] **AR-03 — Make disconnected game actions visibly unavailable** · Priority: **High** · Effort: M
