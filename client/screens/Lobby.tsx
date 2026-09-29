@@ -294,13 +294,27 @@ export function Lobby({ room, youId, spectator, connected, send, onLeave }: Lobb
                 : 'You are watching. You will be seated when the next game opens.'}
             </p>
           ) : isHost ? (
-            <button
-              onClick={() => send({ t: 'start' })}
-              disabled={!connected || !enough || !everyoneReady}
-              className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Start game
-            </button>
+            <>
+              {you && !you.ready && (
+                <button
+                  onClick={() => {
+                    play('flip');
+                    send({ t: 'ready', ready: true });
+                  }}
+                  disabled={!connected}
+                  className="w-full rounded-xl border border-chalk px-5 py-3 font-semibold text-chalk transition hover:bg-chalk/10 disabled:opacity-50"
+                >
+                  I'm ready
+                </button>
+              )}
+              <button
+                onClick={() => send({ t: 'start' })}
+                disabled={!connected || !enough || !everyoneReady}
+                className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Start game
+              </button>
+            </>
           ) : (
             <p className="rounded-xl border border-edge bg-raised px-4 py-3 text-center text-sm text-chalk-dim">
               Waiting for {room.players.find((p) => p.id === room.hostId)?.name ?? 'the host'} to start.

@@ -74,7 +74,7 @@ other /uno/* paths    → landing screen without changing the URL
   - **Files:** `client/RoomShell.tsx`, `client/screens/Lobby.tsx`, `client/screens/Table.tsx`, `client/components/Scoreboard.tsx`, `client/components/Overlays.tsx`, `client/lib/useRoom.ts`
   - **Depends on:** —
 
-- [ ] **AR-04 — Put the host's Ready step next to Start game** · Priority: **High** · Effort: S
+- [x] **AR-04 — Put the host's Ready step next to Start game** · done 2026-09-29 · Priority: **High** · Effort: S
   - **Issue:** The host must mark themselves Ready in the player list (`client/screens/Lobby.tsx:133-148`), while Start game is below the entire house-rules section and remains disabled until everyone is ready (`client/screens/Lobby.tsx:185-315`). The status can merely say it is waiting on the host's own name.
   - **Why it matters:** A host who has already invited a friend or added a bot can reach a disabled primary action without seeing the required self-action.
   - **Recommendation:** Place a host Ready control beside Start, or make the disabled-state guidance link/focus the existing Ready control. Keep the server's ready requirement intact.
