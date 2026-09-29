@@ -128,7 +128,7 @@ export default function App() {
   }, []);
 
   const leaveRoom = useCallback((message?: string) => {
-    history.pushState({}, '', BASE_URL);
+    history.replaceState({}, '', BASE_URL);
     setCode(null);
     setCreating(false);
     setNotice(message ?? null);
