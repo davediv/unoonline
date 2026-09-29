@@ -59,7 +59,6 @@ export function ColorPicker({
         {COLORS.map((color, index) => (
           <motion.button
             key={color}
-            autoFocus={index === 0}
             disabled={disabled}
             onClick={() => onPick(color)}
             initial={{ opacity: 0, y: 8 }}
@@ -95,10 +94,9 @@ export function SwapPicker({
       <h2 className="display mb-1 text-xl">Swap hands with</h2>
       <p className="mb-4 text-sm text-chalk-dim">You take theirs, they take yours.</p>
       <ul className="space-y-2">
-        {players.map((player, index) => (
+        {players.map((player) => (
           <li key={player.id}>
             <button
-              autoFocus={index === 0}
               disabled={disabled}
               onClick={() => onPick(player.id)}
               className="flex w-full items-center gap-3 rounded-xl border border-edge px-3 py-2.5 text-left transition hover:border-chalk-faint"
@@ -136,7 +134,6 @@ export function HandReveal({
         {hand.length === 0 && <p className="text-sm text-chalk-faint">Nothing left.</p>}
       </div>
       <button
-        autoFocus
         onClick={onClose}
         className="w-full rounded-xl border border-edge py-3 font-semibold text-chalk transition hover:border-chalk-faint"
       >
