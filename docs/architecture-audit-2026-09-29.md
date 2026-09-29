@@ -90,7 +90,7 @@ other /uno/* paths    → landing screen without changing the URL
   - **Files:** `client/components/Overlays.tsx`, `client/components/Scoreboard.tsx`, `client/components/Hand.tsx`, `client/screens/Table.tsx`, `client/lib/modalFocus.ts`
   - **Depends on:** —
 
-- [ ] **AR-06 — Make leaving a room a stable history transition** · Priority: **Medium** · Effort: S
+- [x] **AR-06 — Make leaving a room a stable history transition** · done 2026-09-29 · Priority: **Medium** · Effort: S
   - **Issue:** Leave pushes the landing URL on top of the room entry (`client/App.tsx:119-131`), so Back after Leave returns to that same room and starts the connection again (`client/App.tsx:92-100,135-146`).
   - **Why it matters:** A player who deliberately leaves can unexpectedly rejoin through ordinary browser navigation; repeated leave/back cycles also stack entries.
   - **Recommendation:** Replace the current room history entry when Leave is explicit, while retaining normal Back/Forward navigation for a room entered from the landing screen. Verify direct-link and create flows.
