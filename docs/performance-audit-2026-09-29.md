@@ -97,11 +97,17 @@ None supported by the current evidence. PERF-12 spans the preloader and two visi
 
 | Route / interaction | Metric | Before | After | Target |
 |---------------------|--------|--------|-------|--------|
-| `/uno/` | Initial JS gzip | 68.4 KiB | | ≤ 200 KiB |
-| `/uno/r/CODE` cold lobby | Required JS gzip before lobby | 125.0 KiB | | ≤ 80 KiB |
-| `/uno/r/CODE` cold lobby | Navigation → lobby visible at slow 4G + 4× CPU | unavailable | | ≤ 1.4 s |
-| `/uno/` | LCP / CLS | unavailable / unavailable | | ≤ 2.5 s / ≤ 0.1 |
-| Create and join | Click → lobby visible | unavailable | | ≤ 1.1 s / ≤ 0.4 s |
-| Start game | Click → table visible | unavailable | | ≤ 0.15 s |
-| Play or draw | Interaction duration (INP when field data exists) | unavailable | | ≤ 0.2 s |
-| Chat | Time to visible message | unavailable | | no perceptible lag |
+| `/uno/` | Initial JS gzip | 68.4 KiB | 68.4 KiB, unchanged | ≤ 200 KiB |
+| `/uno/r/CODE` cold lobby | Required JS gzip before lobby | 125.0 KiB | **74.3 KiB**, −50.7 KiB ✅ | ≤ 80 KiB |
+| `/uno/r/CODE` cold lobby | Navigation → lobby visible at slow 4G + 4× CPU | unavailable | unavailable without a running build | ≤ 1.4 s |
+| `/uno/` | LCP / CLS | unavailable / unavailable | unavailable without a running build | ≤ 2.5 s / ≤ 0.1 |
+| Create and join | Click → lobby visible | unavailable | unavailable without a running build | ≤ 1.1 s / ≤ 0.4 s |
+| Start game | Click → table visible | unavailable | unavailable without a running build | ≤ 0.15 s |
+| Play or draw | Interaction duration (INP when field data exists) | unavailable | unavailable without a running build | ≤ 0.2 s |
+| Chat | Time to visible message | unavailable | unavailable without a running build | no perceptible lag |
+
+## Final validation and limits
+
+After PERF-12, `npm run lint`, `npx tsc -b --pretty false`, `npm run build`, and `npm run test:all` pass; the tests cover 127 shared cases and 26 Worker cases. No formatter is configured. The built code still keeps the landing entry at 68.4 KiB gzip, and total JS across all chunks is 124.0 KiB gzip versus 125.0 KiB before. The game table now holds the animation runtime in its deferred 49.7 KiB gzip chunk. The CSS grows from 6.5 to 6.7 KiB gzip. At 1.6 Mbps, the pre-lobby JS change reduces the transfer budget by about 0.26 s, with no claim about actual wall time because browser/network overlap and 4× CPU cost were not measured.
+
+Browser smoke checks at desktop and 390 px, toast and player-row animation checks, WebSocket interaction timing, Core Web Vitals, and console inspection remain unavailable in this static/build run. They should be checked against a running build before treating the estimated time saving or the Start-flow target as confirmed.
