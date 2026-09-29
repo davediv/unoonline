@@ -98,12 +98,12 @@ other /uno/* paths    → landing screen without changing the URL
   - **Files:** `client/App.tsx`
   - **Depends on:** —
 
-- [ ] **AR-07 — Give unknown room URLs an explicit recovery path** · Priority: **Medium** · Effort: S
+- [x] **AR-07 — Give unknown room URLs an explicit recovery path** · done 2026-09-29 · Priority: **Medium** · Effort: S
   - **Issue:** Invalid room codes and all other `/uno/*` paths render the landing screen while leaving the unrecognized URL in the address bar (`client/App.tsx:38-53,133-146`; `worker/index.ts:61-73`). A valid-shaped but closed room is eventually sent back with a notice (`client/RoomShell.tsx:30-40`), so malformed paths behave inconsistently.
   - **Why it matters:** A mistyped or stale link appears to have succeeded enough to load the app, but the URL still suggests a room and refresh repeats the ambiguity.
   - **Recommendation:** Normalize or replace invalid room paths with `/uno/` and show a clear invalid-link notice; give other unknown paths a small recovery view or redirect. Keep valid room deep links reloadable.
   - **Expected benefit:** Broken links lead users to a known starting point with a reason they can act on.
-  - **Files:** `client/App.tsx`, `worker/index.ts`
+  - **Files:** `client/App.tsx`
   - **Depends on:** —
 
 ## Top 5
