@@ -36,24 +36,35 @@ function prepareRoom(): void {
   });
 }
 
-function codeFromPath(): string | null {
+function routeFromPath(): { code: string | null; notice: string | null } {
   // The app is served under /uno, so that comes off before the route is read.
   const path = stripBase(location.pathname);
+  if (path === '/') return { code: null, notice: null };
   const match = path?.match(/^\/r\/([^/]+)\/?$/);
-  return match ? normalizeRoomCode(match[1]) : null;
+  const code = match ? normalizeRoomCode(match[1]) : null;
+  if (code) return { code, notice: null };
+  return {
+    code: null,
+    notice: match
+      ? 'That room link has an invalid code. Check it and try again.'
+      : 'That page does not exist. Create a room or join with a code below.',
+  };
 }
+
+const initialRoute = routeFromPath();
+if (initialRoute.notice) history.replaceState({}, '', BASE_URL);
 
 // Arriving on a room link: fetch the room's code alongside the socket, which
 // `Room` opens on its first render, rather than one after the other.
-if (codeFromPath()) prepareRoom();
+if (initialRoute.code) prepareRoom();
 
 export default function App() {
   const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
-  const [code, setCode] = useState<string | null>(() => codeFromPath());
+  const [code, setCode] = useState<string | null>(initialRoute.code);
   const [entryPending, setEntryPending] = useState(true);
   /** Whether this visit is making the room, rather than joining one. */
   const [creating, setCreating] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(initialRoute.notice);
   const prefsRef = useRef(prefs);
 
   useEffect(() => {
@@ -94,7 +105,10 @@ export default function App() {
   // Back and forward should move between the landing page and a room.
   useEffect(() => {
     const onPop = () => {
-      setCode(codeFromPath());
+      const route = routeFromPath();
+      if (route.notice) history.replaceState({}, '', BASE_URL);
+      setCode(route.code);
+      setNotice(route.notice);
       setCreating(false);
       setEntryPending(true);
     };
@@ -156,7 +170,7 @@ export default function App() {
           onLeave={leaveRoom}
         />
       ) : (
-        <Landing onEnter={enterRoom} onPrepareRoom={prepareRoom} notice={notice} />
+        <Landing key={notice ?? 'landing'} onEnter={enterRoom} onPrepareRoom={prepareRoom} notice={notice} />
       )}
     </PrefsContext.Provider>
   );
