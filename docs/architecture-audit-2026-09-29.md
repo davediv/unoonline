@@ -82,12 +82,12 @@ other /uno/* paths    → landing screen without changing the URL
   - **Files:** `client/screens/Lobby.tsx`
   - **Depends on:** —
 
-- [ ] **AR-05 — Keep keyboard focus within active game dialogs** · Priority: **High** · Effort: M
+- [x] **AR-05 — Keep keyboard focus within active game dialogs** · done 2026-09-29 · Priority: **High** · Effort: M
   - **Issue:** Colour, swap, reveal, and result layers declare modal dialogs (`client/components/Overlays.tsx:14-35`, `client/components/Scoreboard.tsx:43-52`), but have no focus containment or restoration. The hand's window-level arrow handler remains active when a modal has focus (`client/components/Hand.tsx:115-145`).
   - **Why it matters:** Keyboard and screen-reader users can reach controls behind a game decision, lose their place, or change a hidden hand selection while choosing an option.
   - **Recommendation:** Use a shared dialog focus pattern with initial focus, containment, background inertness, and focus restoration. Scope hand shortcuts to the active table and pause them during modal decisions.
   - **Expected benefit:** Dialogs operate as the single active step in the flow for keyboard and assistive-technology users.
-  - **Files:** `client/components/Overlays.tsx`, `client/components/Scoreboard.tsx`, `client/components/Hand.tsx`, `client/screens/Table.tsx`
+  - **Files:** `client/components/Overlays.tsx`, `client/components/Scoreboard.tsx`, `client/components/Hand.tsx`, `client/screens/Table.tsx`, `client/lib/modalFocus.ts`
   - **Depends on:** —
 
 - [ ] **AR-06 — Make leaving a room a stable history transition** · Priority: **Medium** · Effort: S

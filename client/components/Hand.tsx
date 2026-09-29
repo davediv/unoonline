@@ -114,6 +114,7 @@ export const Hand = memo(function Hand({
   // reconcile the table, opponents, piles, chat, and overlays around it.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('[aria-modal="true"]')) return;
       const element = event.target as HTMLElement | null;
       if (element?.tagName === 'INPUT' || element?.tagName === 'TEXTAREA') return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
