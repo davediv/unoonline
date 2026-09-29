@@ -19,6 +19,7 @@ interface LobbyProps {
   room: PublicRoom;
   youId: string | null;
   spectator: boolean;
+  connected: boolean;
   send: (message: ClientMessage) => void;
   onLeave: () => void;
 }
@@ -44,7 +45,7 @@ const TIMERS: Array<{ value: TurnTimer; label: string }> = [
   { value: 60, label: '60s' },
 ];
 
-export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
+export function Lobby({ room, youId, spectator, connected, send, onLeave }: LobbyProps) {
   const [copied, copy] = useCopy();
   const isHost = youId !== null && room.hostId === youId;
   const you = room.players.find((player) => player.id === youId);
@@ -90,7 +91,7 @@ export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
           </p>
         </section>
 
-        <section>
+        <section inert={!connected} className={!connected ? 'opacity-55' : undefined}>
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold tracking-wide text-chalk-dim uppercase">
               Players
@@ -182,7 +183,7 @@ export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
           )}
         </section>
 
-        <section>
+        <section inert={!connected} className={!connected ? 'opacity-55' : undefined}>
           <h2 className="mb-2 text-sm font-semibold tracking-wide text-chalk-dim uppercase">
             House rules {!isHost && <span className="text-chalk-faint normal-case">— the host sets these</span>}
           </h2>
@@ -281,6 +282,11 @@ export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
         </section>
 
         <div className="mt-auto space-y-2 pt-2">
+          {!connected && (
+            <p role="status" className="rounded-xl border border-uno-yellow/40 px-4 py-3 text-center text-sm text-uno-yellow">
+              Reconnecting. Room actions will return when you are back in.
+            </p>
+          )}
           {spectator ? (
             <p className="rounded-xl border border-edge bg-raised px-4 py-3 text-center text-sm text-chalk-dim">
               {room.players.length >= MAX_PLAYERS
@@ -290,7 +296,7 @@ export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
           ) : isHost ? (
             <button
               onClick={() => send({ t: 'start' })}
-              disabled={!enough || !everyoneReady}
+              disabled={!connected || !enough || !everyoneReady}
               className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               Start game

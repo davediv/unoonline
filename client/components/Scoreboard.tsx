@@ -18,6 +18,7 @@ interface ScoreboardProps {
   onNextRound: () => void;
   onNewMatch: () => void;
   onLeave: () => void;
+  connected: boolean;
 }
 
 export function Scoreboard({
@@ -27,6 +28,7 @@ export function Scoreboard({
   onNextRound,
   onNewMatch,
   onLeave,
+  connected,
 }: ScoreboardProps) {
   const result = room.result;
   if (!result) return null;
@@ -136,7 +138,8 @@ export function Scoreboard({
             isHost ? (
               <button
                 onClick={onNewMatch}
-                className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white"
+                disabled={!connected}
+                className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white disabled:opacity-50"
               >
                 Play again
               </button>
@@ -149,7 +152,7 @@ export function Scoreboard({
             <>
               <button
                 onClick={onNextRound}
-                disabled={you?.ready === true}
+                disabled={!connected || you?.ready === true}
                 className="display w-full rounded-xl bg-chalk px-5 py-4 text-lg text-felt transition hover:bg-white disabled:opacity-50"
               >
                 {you?.ready ? 'Waiting for the others…' : 'Next round'}

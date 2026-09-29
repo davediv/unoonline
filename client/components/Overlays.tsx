@@ -11,7 +11,7 @@ import type { Card, Color, PublicPlayer } from '../../shared/types';
 import { COLORS } from '../../shared/types';
 import { colorLabel } from '../../shared/deck';
 
-function Sheet({ children, label }: { children: React.ReactNode; label: string }) {
+function Sheet({ children, label, disabled = false }: { children: React.ReactNode; label: string; disabled?: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -22,6 +22,7 @@ function Sheet({ children, label }: { children: React.ReactNode; label: string }
       role="dialog"
       aria-modal="true"
       aria-label={label}
+      inert={disabled}
     >
       <motion.div
         initial={{ y: 24, scale: 0.98 }}
@@ -38,12 +39,14 @@ function Sheet({ children, label }: { children: React.ReactNode; label: string }
 export function ColorPicker({
   colorblind,
   onPick,
+  disabled,
 }: {
   colorblind: boolean;
   onPick: (color: Color) => void;
+  disabled?: boolean;
 }) {
   return (
-    <Sheet label="Choose a colour">
+    <Sheet label="Choose a colour" disabled={disabled}>
       <h2 className="display mb-1 text-xl">Name a colour</h2>
       <p className="mb-4 text-sm text-chalk-dim">Play carries on in whichever you pick.</p>
       <div className="grid grid-cols-2 gap-3">
@@ -74,12 +77,14 @@ export function ColorPicker({
 export function SwapPicker({
   players,
   onPick,
+  disabled,
 }: {
   players: PublicPlayer[];
   onPick: (playerId: string) => void;
+  disabled?: boolean;
 }) {
   return (
-    <Sheet label="Choose a player to swap hands with">
+    <Sheet label="Choose a player to swap hands with" disabled={disabled}>
       <h2 className="display mb-1 text-xl">Swap hands with</h2>
       <p className="mb-4 text-sm text-chalk-dim">You take theirs, they take yours.</p>
       <ul className="space-y-2">
