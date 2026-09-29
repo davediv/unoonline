@@ -283,7 +283,9 @@ export function Lobby({ room, youId, spectator, send, onLeave }: LobbyProps) {
         <div className="mt-auto space-y-2 pt-2">
           {spectator ? (
             <p className="rounded-xl border border-edge bg-raised px-4 py-3 text-center text-sm text-chalk-dim">
-              You are watching. You will be dealt in when the next game starts.
+              {room.players.length >= MAX_PLAYERS
+                ? 'You are watching. The table is full; you can join when a seat opens.'
+                : 'You are watching. You will be seated when the next game opens.'}
             </p>
           ) : isHost ? (
             <button

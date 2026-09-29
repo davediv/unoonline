@@ -50,7 +50,7 @@ other /uno/* paths    → landing screen without changing the URL
 
 ## Recommendations
 
-- [ ] **AR-01 — Give spectators a path into the next game** · Priority: **Critical** · Effort: L
+- [x] **AR-01 — Give spectators a path into the next game** · done 2026-09-29 · Priority: **Critical** · Effort: L
   - **Issue:** The lobby promises spectators a seat next game (`client/screens/Lobby.tsx:283-287`), but the server assigns a spectator socket `playerId: null` and never promotes it at round or match transitions (`worker/room.ts:249-255,312-315,410-454`). The scoreboard also offers spectators a Next round button whose message is rejected (`client/components/Scoreboard.tsx:145-152`, `worker/room.ts:312-315`).
   - **Why it matters:** A late guest who waits as instructed cannot join play without leaving and reconnecting at the right time.
   - **Recommendation:** Define a capacity-aware spectator queue and promote waiting sockets into available seats when the next game opens; keep them informed when the room is full. Until promotion, show a waiting state instead of player-only round controls. Cover lobby, round, match, reconnect, and full-room cases in worker tests.

@@ -128,7 +128,11 @@ export function Scoreboard({
         </section>
 
         <div className="space-y-2">
-          {matchOver ? (
+          {!you ? (
+            <p className="rounded-xl border border-edge bg-raised px-4 py-3 text-center text-sm text-chalk-dim">
+              You are watching. You can join when a seat opens for the next game.
+            </p>
+          ) : matchOver ? (
             isHost ? (
               <button
                 onClick={onNewMatch}
