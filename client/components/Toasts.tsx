@@ -3,8 +3,7 @@
  * and how long they stay.
  */
 
-import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState } from 'react';
 import type { Toast } from '../lib/toasts';
 
 export const Toasts = memo(function Toasts({
@@ -20,35 +19,36 @@ export const Toasts = memo(function Toasts({
       role="status"
       aria-live="polite"
     >
-      <AnimatePresence initial={false}>
-        {toasts.map((toast) => (
-          <ToastRow key={toast.id} toast={toast} onExpire={onExpire} />
-        ))}
-      </AnimatePresence>
+      {toasts.map((toast) => (
+        <ToastRow key={toast.id} toast={toast} onExpire={onExpire} />
+      ))}
     </div>
   );
 });
 
 function ToastRow({ toast, onExpire }: { toast: Toast; onExpire: (id: number) => void }) {
+  const [exiting, setExiting] = useState(false);
+
   useEffect(() => {
-    const id = window.setTimeout(() => onExpire(toast.id), 3600);
-    return () => window.clearTimeout(id);
+    const exit = window.setTimeout(() => setExiting(true), 3600);
+    const remove = window.setTimeout(() => onExpire(toast.id), 3820);
+    return () => {
+      window.clearTimeout(exit);
+      window.clearTimeout(remove);
+    };
   }, [toast.id, onExpire]);
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -12, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -8, scale: 0.98 }}
-      transition={{ duration: 0.22, ease: [0.2, 0.9, 0.24, 1] }}
-      className={`pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur ${
-        toast.tone === 'warn'
-          ? 'border-uno-red/40 bg-[#1b1216]/95 text-chalk'
-          : 'border-edge bg-raised/95 text-chalk'
-      }`}
-    >
-      {toast.text}
-    </motion.div>
+    <div className={`toast-slot ${exiting ? 'toast-slot-exit' : ''}`}>
+      <div
+        className={`toast-row pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur ${
+          toast.tone === 'warn'
+            ? 'border-uno-red/40 bg-[#1b1216]/95 text-chalk'
+            : 'border-edge bg-raised/95 text-chalk'
+        }`}
+      >
+        {toast.text}
+      </div>
+    </div>
   );
 }

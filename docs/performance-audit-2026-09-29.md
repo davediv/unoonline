@@ -66,7 +66,7 @@ At 1.6 Mbps, **50.5 KiB gzip** takes about **0.26 s** to transfer if it occupies
 
 ## Recommendations
 
-- [ ] **PERF-12 — Show the lobby before loading the table animation code** · Priority: **Medium** · Effort: M · Risk: Medium
+- [x] **PERF-12 — Show the lobby before loading the table animation code** · Priority: **Medium** · Effort: M · Risk: Medium · done 2026-09-29
   - **Issue:** `roomShell` in `client/App.tsx:24-29` resolves only after `preloadRoomScreens()` finishes both screens (`client/roomScreens.ts:13-19`). A cold lobby therefore waits for the unused `Table` chunk. `client/screens/Lobby.tsx:8,104-160` and `client/components/Toasts.tsx:6,23-44` import Framer Motion for player-row and toast animations, so the lobby also loads the 37.7 KiB animation runtime and 1.9 KiB `AnimatePresence` chunk.
   - **Why it matters:** a shared room link is a primary entry path. On a slow connection, bytes needed only for play compete with the lobby's code; JavaScript parsing and animation setup also occur before the lobby is visible. Yesterday's audit measured the animation runtime as the largest room-only chunk.
   - **Optimization:** make the lobby and RoomShell ready without waiting for `Table`; start the table download after the first lobby paint or during idle time, but load it immediately when the server's first room snapshot is already in a playing phase. Replace the lobby player-row and toast animations with equivalent CSS transitions and entry/exit behavior so Framer Motion remains table-only. Preserve the existing loading fallback and a ready table at game start.
@@ -74,7 +74,7 @@ At 1.6 Mbps, **50.5 KiB gzip** takes about **0.26 s** to transfer if it occupies
   - **Files:** `client/App.tsx`, `client/roomScreens.ts`, `client/RoomShell.tsx`, `client/screens/Lobby.tsx`, `client/components/Toasts.tsx`, `client/index.css`
   - **Depends on:** —
   - **Measure:** compare production-build gzip bytes required before the lobby can render, then use a browser on the same build and throttled connection to compare cold navigation → lobby visible and Start click → table visible. Verify the table prefetch does not add a visible Start delay and that toast/player-row animations and reduced-motion behavior remain equivalent.
-  - **Before → After:** **125.0 KiB gzip** of room-preloaded JS → pending implementation and measurement. Cold lobby and Start timings are unavailable until a running build can be measured.
+  - **Before → After:** production build, gzip level 9: JS required before the lobby can render **125.0 → 74.3 KiB** (−50.7 KiB); CSS **6.5 → 6.7 KiB** (+0.2 KiB). The Table chunk now holds 49.7 KiB gzip and begins downloading after two animation frames in a lobby, or immediately when the first snapshot is already in a game. At 1.6 Mbps, the removed pre-lobby JS is about **0.26 s of transfer budget**; actual wall-time gain remains unmeasured. `npm run lint`, `npx tsc -b --pretty false`, `npm run build`, and `npm run test:all` pass (127 shared + 26 worker tests). Browser timing, animation, and Start-flow checks are unavailable in static mode.
 
 ## Top 5
 

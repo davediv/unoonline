@@ -28,6 +28,24 @@ export default function RoomShell({ code, connection, onLeave }: RoomShellProps)
   const { status, room, chat, youId, spectator, error, pulse, clockSkew, send } = connection;
   const connected = status === 'open';
 
+  // Two animation frames put this fetch after the lobby's first paint. The
+  // table is then warm well before the host can invite, ready, and start.
+  useEffect(() => {
+    if (room?.phase !== 'lobby') return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        void table.preload().catch(() => {
+          // Entering the table still has the lazy boundary and reload path.
+        });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [room?.phase]);
+
   // Every rejection the server sends becomes a sentence.
   useEffect(() => {
     if (!error) return;

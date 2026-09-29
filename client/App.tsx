@@ -11,20 +11,18 @@ import { RoomIdentity } from './screens/RoomIdentity';
 import { PrefsContext } from './lib/prefsContext';
 import { loadPrefs, loadToken, savePrefs, type Prefs } from './lib/prefs';
 import { preloadable } from './lib/preloadable';
+import { lobby, table } from './roomScreens';
 import { setMuted, unlockAudio } from './lib/sound';
 import { useRoom } from './lib/useRoom';
 import { BASE_URL, stripBase, withBase } from '../shared/base';
 import { normalizeRoomCode, randomNickname } from '../shared/room';
 import { cryptoRng } from '../shared/rng';
 
-/**
- * RoomShell counts as loaded only once both of its screens are too, so the
- * lobby and the table never suspend on the way in.
- */
+/** A lobby can appear without waiting for code used only at the table. */
 const roomShell = preloadable(() =>
   Promise.all([
     import('./RoomShell'),
-    import('./roomScreens').then((screens) => screens.preloadRoomScreens()),
+    lobby.preload(),
   ]).then(([module]) => module.default),
 );
 const RoomShell = roomShell.Component;
@@ -202,6 +200,9 @@ function Room({ code, create, initialName, initialAvatar, onLeave }: RoomProps) 
   // A plain loading screen, not a Suspense fallback, while the chunk is on its
   // way: React keeps a fallback up for at least 300 ms once it has shown one.
   const [ready, setReady] = useState(roomShell.isLoaded);
+  const [tableReady, setTableReady] = useState(table.isLoaded);
+  const phase = connection.room?.phase;
+  const tableLoaded = tableReady || table.isLoaded();
   useEffect(() => {
     if (ready) return;
     let live = true;
@@ -214,7 +215,25 @@ function Room({ code, create, initialName, initialAvatar, onLeave }: RoomProps) 
     };
   }, [ready]);
 
-  if (!ready) return <RoomLoading code={code} onLeave={onLeave} />;
+  // A shared link may lead straight to a game already in progress. Fetch its
+  // table as soon as the welcome frame says so, and avoid a Suspense hold while
+  // that chunk is genuinely loading. An import failure still reaches the
+  // existing lazy boundary and stale-chunk recovery path.
+  useEffect(() => {
+    if (!phase || phase === 'lobby' || tableLoaded) return;
+    let live = true;
+    const settle = () => {
+      if (live) setTableReady(true);
+    };
+    table.preload().then(settle, settle);
+    return () => {
+      live = false;
+    };
+  }, [phase, tableLoaded]);
+
+  if (!ready || (phase && phase !== 'lobby' && !tableLoaded)) {
+    return <RoomLoading code={code} onLeave={onLeave} />;
+  }
   return (
     <Suspense fallback={<RoomLoading code={code} onLeave={onLeave} />}>
       <RoomShell code={code} connection={connection} onLeave={onLeave} />

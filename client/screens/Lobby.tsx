@@ -5,7 +5,7 @@
  * these are house rules, and half of them are argued about every game.
  */
 
-import { motion } from 'framer-motion';
+import { useLayoutEffect, useRef } from 'react';
 import { Avatar } from '../components/Avatar';
 import { CardBack } from '../components/Card';
 import { withBase } from '../../shared/base';
@@ -46,6 +46,8 @@ const TIMERS: Array<{ value: TurnTimer; label: string }> = [
 ];
 
 export function Lobby({ room, youId, spectator, connected, send, onLeave }: LobbyProps) {
+  const playersRef = useRef<HTMLUListElement>(null);
+  const positionsRef = useRef(new Map<string, number>());
   const [copied, copy] = useCopy();
   const isHost = youId !== null && room.hostId === youId;
   const you = room.players.find((player) => player.id === youId);
@@ -53,6 +55,28 @@ export function Lobby({ room, youId, spectator, connected, send, onLeave }: Lobb
   const link = `${location.origin}${withBase(`/r/${room.code}`)}`;
   const enough = room.players.length >= 2;
   const everyoneReady = room.players.every((player) => player.isBot || player.ready);
+
+  // Preserve the short layout movement when seats change, without pulling the
+  // table's animation runtime into the lobby. New rows enter via CSS below.
+  useLayoutEffect(() => {
+    const next = new Map<string, number>();
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const row of playersRef.current?.children ?? []) {
+      const element = row as HTMLElement;
+      const id = element.dataset.playerId;
+      if (!id) continue;
+      const top = element.getBoundingClientRect().top;
+      const previous = positionsRef.current.get(id);
+      if (!reduceMotion && previous !== undefined && Math.abs(previous - top) > 1) {
+        element.animate(
+          [{ transform: `translateY(${previous - top}px)` }, { transform: 'translateY(0)' }],
+          { duration: 220, easing: 'ease-out' },
+        );
+      }
+      next.set(id, top);
+    }
+    positionsRef.current = next;
+  }, [room.players]);
 
   const addBot = (level: BotLevel) => {
     play('join');
@@ -101,15 +125,12 @@ export function Lobby({ room, youId, spectator, connected, send, onLeave }: Lobb
             </span>
           </div>
 
-          <ul className="space-y-2">
+          <ul ref={playersRef} className="space-y-2">
             {room.players.map((player) => (
-              <motion.li
-                layout
+              <li
                 key={player.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22 }}
-                className="flex items-center gap-3 rounded-xl border border-edge bg-raised px-3 py-2.5"
+                data-player-id={player.id}
+                className="lobby-player flex items-center gap-3 rounded-xl border border-edge bg-raised px-3 py-2.5"
               >
                 <Avatar index={player.avatar} size={38} />
                 <div className="min-w-0 flex-1">
@@ -157,7 +178,7 @@ export function Lobby({ room, youId, spectator, connected, send, onLeave }: Lobb
                     ✕
                   </button>
                 )}
-              </motion.li>
+              </li>
             ))}
 
             {room.players.length === 0 && (
