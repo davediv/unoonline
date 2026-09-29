@@ -5,11 +5,13 @@
  * protect, and seeing what people were sitting on is half the fun.
  */
 
+import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { CardFace } from './Card';
 import { Avatar } from './Avatar';
 import type { PublicRoom } from '../../shared/types';
 import { handPoints } from '../../shared/deck';
+import { useModalFocus } from '../lib/modalFocus';
 
 interface ScoreboardProps {
   room: PublicRoom;
@@ -30,6 +32,8 @@ export function Scoreboard({
   onLeave,
   connected,
 }: ScoreboardProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useModalFocus(ref);
   const result = room.result;
   if (!result) return null;
 
@@ -44,6 +48,8 @@ export function Scoreboard({
 
   return (
     <motion.div
+      ref={ref}
+      tabIndex={-1}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}

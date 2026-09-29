@@ -3,6 +3,7 @@
  * choosing who to swap hands with, and looking at a hand you challenged.
  */
 
+import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { CardFace, ColorGlyph } from './Card';
 import { CARD_COLORS } from '../lib/colors';
@@ -10,10 +11,15 @@ import { Avatar } from './Avatar';
 import type { Card, Color, PublicPlayer } from '../../shared/types';
 import { COLORS } from '../../shared/types';
 import { colorLabel } from '../../shared/deck';
+import { useModalFocus } from '../lib/modalFocus';
 
 function Sheet({ children, label, disabled = false }: { children: React.ReactNode; label: string; disabled?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useModalFocus(ref);
   return (
     <motion.div
+      ref={ref}
+      tabIndex={-1}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -22,7 +28,6 @@ function Sheet({ children, label, disabled = false }: { children: React.ReactNod
       role="dialog"
       aria-modal="true"
       aria-label={label}
-      inert={disabled}
     >
       <motion.div
         initial={{ y: 24, scale: 0.98 }}
@@ -30,6 +35,7 @@ function Sheet({ children, label, disabled = false }: { children: React.ReactNod
         transition={{ duration: 0.24, ease: [0.2, 0.9, 0.24, 1] }}
         className="w-full max-w-sm rounded-2xl border border-edge bg-raised p-5 shadow-2xl"
       >
+        {disabled && <p role="status" className="mb-3 text-sm text-uno-yellow">Reconnecting. Choices will return shortly.</p>}
         {children}
       </motion.div>
     </motion.div>
@@ -54,6 +60,7 @@ export function ColorPicker({
           <motion.button
             key={color}
             autoFocus={index === 0}
+            disabled={disabled}
             onClick={() => onPick(color)}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -92,6 +99,7 @@ export function SwapPicker({
           <li key={player.id}>
             <button
               autoFocus={index === 0}
+              disabled={disabled}
               onClick={() => onPick(player.id)}
               className="flex w-full items-center gap-3 rounded-xl border border-edge px-3 py-2.5 text-left transition hover:border-chalk-faint"
             >

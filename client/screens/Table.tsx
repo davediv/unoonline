@@ -296,6 +296,7 @@ export function Table({
     };
 
     const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('[aria-modal="true"]') && event.key !== 'Escape') return;
       if (isTyping(event.target)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
