@@ -60,6 +60,11 @@ interface SessionMeta {
   playerId: string | null;
   token: string;
   spectator: boolean;
+  /** Identity and arrival order for a spectator waiting for an open seat. */
+  name?: string;
+  avatar?: number;
+  joinedAt?: number;
+  waitingForSeat?: boolean;
   /** Wire format supported by this browser; absent attachments are v1. */
   protocol?: 1 | 2;
 }
@@ -199,7 +204,7 @@ export class Room extends DurableObject<Env> {
 
     // One live socket per seat: a second tab takes over from the first.
     if (meta.playerId) {
-      for (const other of this.ctx.getWebSockets(meta.playerId)) {
+      for (const other of this.socketsForPlayer(meta.playerId)) {
         if (other === server) continue;
         this.fail(other, 'replaced', 'You opened this room in another tab.', CLOSE_REPLACED);
       }
@@ -246,16 +251,6 @@ export class Room extends DurableObject<Env> {
       }
     }
 
-    const wantsToWatch = url.searchParams.get('spectate') === '1';
-    const canSeat = state.phase === 'lobby' && state.players.length < MAX_PLAYERS;
-    if (wantsToWatch || !canSeat) {
-      // Anyone arriving mid-game watches, with every hand hidden.
-      return {
-        meta: { playerId: null, token: crypto.randomUUID(), spectator: true, protocol },
-        reclaimed: false,
-      };
-    }
-
     const name = cleanName(
       (url.searchParams.get('name') ?? '').replace(CONTROL_CHARS, ''),
       randomNickname(cryptoRng),
@@ -264,6 +259,24 @@ export class Room extends DurableObject<Env> {
     const avatar = Number.isFinite(requestedAvatar)
       ? Math.abs(Math.trunc(requestedAvatar))
       : cryptoRng.int(AVATAR_COUNT);
+    const wantsToWatch = url.searchParams.get('spectate') === '1';
+    const canSeat = state.phase === 'lobby' && state.players.length < MAX_PLAYERS;
+    if (wantsToWatch || !canSeat) {
+      // Anyone arriving mid-game watches, with every hand hidden.
+      return {
+        meta: {
+          playerId: null,
+          token: crypto.randomUUID(),
+          spectator: true,
+          name,
+          avatar,
+          joinedAt: Date.now(),
+          waitingForSeat: !wantsToWatch,
+          protocol,
+        },
+        reclaimed: false,
+      };
+    }
 
     const id = crypto.randomUUID();
     const fresh = crypto.randomUUID();
@@ -374,14 +387,17 @@ export class Room extends DurableObject<Env> {
         const target = findPlayer(state, message.playerId);
         if (!target || target.id === playerId) return null;
         const name = target.name;
-        for (const socket of this.ctx.getWebSockets(target.id)) {
+        for (const socket of this.socketsForPlayer(target.id)) {
           this.fail(socket, 'removed', 'The host removed you from the room.', CLOSE_REPLACED);
         }
         for (const [token, owner] of Object.entries(this.tokens)) {
           if (owner === target.id) delete this.tokens[token];
         }
         unseatPlayer(state, target.id);
-        return [{ t: 'playerLeft', playerId: target.id, name }];
+        return [
+          { t: 'playerLeft', playerId: target.id, name },
+          ...this.promoteSpectators(now),
+        ];
       }
 
       case 'start': {
@@ -410,19 +426,20 @@ export class Room extends DurableObject<Env> {
       case 'nextRound': {
         if (state.phase !== 'roundOver') return null;
         player.ready = true;
+        const promoted = this.promoteSpectators(now);
         const waiting = state.players.filter((p) => !p.isBot && p.connected && !p.ready);
-        if (waiting.length > 0) return [];
+        if (waiting.length > 0) return promoted;
         const result = startNextRound(state, { rng: cryptoRng, now });
-        if (!result.ok) return [];
+        if (!result.ok) return promoted;
         this.room = result.state;
-        return result.events;
+        return [...promoted, ...result.events];
       }
 
       case 'newMatch': {
         if (!this.requireHost(ws, isHost)) return null;
         if (state.phase !== 'matchOver') return null;
         this.resetToLobby(state);
-        return [];
+        return this.promoteSpectators(now);
       }
 
       default:
@@ -451,6 +468,45 @@ export class Room extends DurableObject<Env> {
       player.roundPoints = 0;
       player.ready = player.isBot;
     }
+  }
+
+  /** Seat waiting spectators in arrival order when a game can accept players. */
+  private promoteSpectators(now: number): GameEvent[] {
+    const state = this.room;
+    if (!state || (state.phase !== 'lobby' && state.phase !== 'roundOver')) return [];
+    const waiting = this.ctx.getWebSockets()
+      .map((socket) => ({ socket, meta: this.metaOf(socket) }))
+      .filter((entry): entry is { socket: WebSocket; meta: SessionMeta } =>
+        entry.meta !== null && entry.meta.spectator && entry.meta.playerId === null &&
+        entry.meta.waitingForSeat === true,
+      )
+      .sort((a, b) => (a.meta.joinedAt ?? 0) - (b.meta.joinedAt ?? 0));
+    const events: GameEvent[] = [];
+    for (const { socket, meta } of waiting) {
+      if (state.players.length >= MAX_PLAYERS) break;
+      const player = seatPlayer(state, {
+        id: crypto.randomUUID(),
+        name: meta.name ?? randomNickname(cryptoRng),
+        avatar: meta.avatar ?? cryptoRng.int(AVATAR_COUNT),
+      });
+      const nextMeta = { ...meta, playerId: player.id, spectator: false };
+      socket.serializeAttachment(nextMeta);
+      this.tokens[meta.token] = player.id;
+      this.send(socket, {
+        t: 'welcome',
+        youId: player.id,
+        token: meta.token,
+        spectator: false,
+        room: serializeFor(state, player.id, now),
+        chat: this.chat.slice(-CHAT_HISTORY),
+      });
+      events.push({ t: 'playerJoined', playerId: player.id, name: player.name });
+    }
+    return events;
+  }
+
+  private socketsForPlayer(playerId: string): WebSocket[] {
+    return this.ctx.getWebSockets().filter((socket) => this.metaOf(socket)?.playerId === playerId);
   }
 
   private handleIntent(
@@ -525,7 +581,7 @@ export class Room extends DurableObject<Env> {
     if (!meta || !this.room || !meta.playerId) return;
 
     // A replacement socket for the same seat may already be live.
-    const others = this.ctx.getWebSockets(meta.playerId).filter((other) => other !== ws);
+    const others = this.socketsForPlayer(meta.playerId).filter((other) => other !== ws);
     if (others.length > 0) return;
 
     // Close and error can both report the same drop; the first one counts.
@@ -542,6 +598,7 @@ export class Room extends DurableObject<Env> {
       delete this.tokens[meta.token];
       unseatPlayer(this.room, player.id);
       events.push({ t: 'playerLeft', playerId: player.id, name });
+      events.push(...this.promoteSpectators(now));
     } else {
       // They keep their seat, and their hand, for a minute.
       this.setTimer('grace', now + RECONNECT_GRACE_MS, player.id);
@@ -654,6 +711,7 @@ export class Room extends DurableObject<Env> {
     if (state.phase === 'lobby') {
       unseatPlayer(state, player.id);
       events.push({ t: 'playerLeft', playerId: player.id, name: player.name });
+      events.push(...this.promoteSpectators(Date.now()));
       return;
     }
     // A bot finishes the round in their seat so nobody is left waiting.

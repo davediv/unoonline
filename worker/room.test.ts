@@ -359,6 +359,50 @@ describe('bots', () => {
 });
 
 describe('reconnecting and watching', () => {
+  it('promotes a waiting spectator when a lobby seat opens', async () => {
+    const code = await createRoom();
+    const host = await Client.open(code, { name: 'Maya' });
+    await host.welcome();
+    for (let count = 1; count < 8; count++) {
+      host.send({ t: 'addBot', level: 'easy' });
+      await host.settled((room) => room.players.length === count + 1, `seat ${count + 1}`);
+    }
+
+    const watcher = await Client.open(code, { name: 'Alex', avatar: '3' });
+    expect((await watcher.welcome()).spectator).toBe(true);
+    const bot = host.room().players.find((player) => player.isBot);
+    expect(bot).toBeDefined();
+    host.send({ t: 'removePlayer', playerId: bot!.id });
+
+    const promoted = await watcher.waitFor<Extract<ServerMessage, { t: 'welcome' }>>(
+      (message) => message.t === 'welcome' && !message.spectator,
+      'spectator promotion',
+    );
+    expect(promoted.youId).toBeTruthy();
+    expect(promoted.room.players.find((player) => player.id === promoted.youId)?.name).toBe('Alex');
+    expect(promoted.room.players.find((player) => player.id === promoted.youId)?.avatar).toBe(3);
+    await host.settled((room) => room.players.some((player) => player.id === promoted.youId), 'promoted seat');
+
+    const returning = await Client.open(code, { token: promoted.token });
+    expect((await returning.welcome()).youId).toBe(promoted.youId);
+  });
+
+  it('keeps explicitly spectating guests out of the seat queue', async () => {
+    const code = await createRoom();
+    const host = await Client.open(code, { name: 'Maya' });
+    await host.welcome();
+    for (let count = 1; count < 8; count++) {
+      host.send({ t: 'addBot', level: 'easy' });
+      await host.settled((room) => room.players.length === count + 1, `seat ${count + 1}`);
+    }
+    const watcher = await Client.open(code, { name: 'Observer', spectate: '1' });
+    await watcher.welcome();
+    const bot = host.room().players.find((player) => player.isBot);
+    host.send({ t: 'removePlayer', playerId: bot!.id });
+    await host.settled((room) => room.players.length === 7, 'open seat');
+    expect(watcher.messages.filter((message) => message.t === 'welcome')).toHaveLength(1);
+  });
+
   it('gives a returning player their seat and their hand back', async () => {
     const { code, host, guest, hostWelcome } = await startedGame();
     const before = host.room().players.find((p) => p.id === hostWelcome.youId);
