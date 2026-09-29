@@ -26,6 +26,7 @@ export default function RoomShell({ code, connection, onLeave }: RoomShellProps)
   const droppedRef = useRef(false);
 
   const { status, room, chat, youId, spectator, error, pulse, clockSkew, send } = connection;
+  const connected = status === 'open';
 
   // Every rejection the server sends becomes a sentence.
   useEffect(() => {
@@ -77,7 +78,7 @@ export default function RoomShell({ code, connection, onLeave }: RoomShellProps)
     <>
       <Suspense fallback={<RoomScreenLoading code={code} />}>
         {room.phase === 'lobby' ? (
-          <Lobby room={room} youId={youId} spectator={spectator} send={send} onLeave={leave} />
+          <Lobby room={room} youId={youId} spectator={spectator} connected={connected} send={send} onLeave={leave} />
         ) : (
           <Table
             room={room}
@@ -88,6 +89,7 @@ export default function RoomShell({ code, connection, onLeave }: RoomShellProps)
             eventSeq={pulse.seq}
             clockSkew={clockSkew}
             connectionNote={connectionNote}
+            connected={connected}
             send={send}
             onLeave={leave}
           />

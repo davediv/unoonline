@@ -160,7 +160,6 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
 
       socket.onopen = () => {
         heardAtRef.current = performance.now();
-        setStatus('open');
         pingRef.current = window.setInterval(ping, PING_INTERVAL_MS);
       };
 
@@ -178,6 +177,7 @@ export function useRoom(options: JoinOptions | null): RoomConnection {
             // Only a room that answered counts as back: a socket that opens
             // and drops again keeps backing off rather than retrying at once.
             retryRef.current = 0;
+            setStatus('open');
             create = false;
             saveToken(options.code, message.token);
             setYouId(message.youId);

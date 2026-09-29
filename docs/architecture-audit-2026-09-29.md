@@ -66,12 +66,12 @@ other /uno/* paths    → landing screen without changing the URL
   - **Files:** `client/App.tsx`, `client/screens/RoomIdentity.tsx`
   - **Depends on:** —
 
-- [ ] **AR-03 — Make disconnected game actions visibly unavailable** · Priority: **High** · Effort: M
+- [x] **AR-03 — Make disconnected game actions visibly unavailable** · done 2026-09-29 · Priority: **High** · Effort: M
   - **Issue:** `useRoom.send` silently drops messages unless the socket is open (`client/lib/useRoom.ts:309-314`), while the table still renders actions from the last snapshot during reconnect (`client/RoomShell.tsx:55-94`, `client/screens/Table.tsx:433-465`). A draw even enters a temporary pending state after the dropped send (`client/screens/Table.tsx:236-256`).
   - **Why it matters:** Players can tap a legal-looking action and receive no result, especially during a timed turn.
   - **Recommendation:** Pass connection availability into lobby, table, and scoreboard controls. Disable server actions while reconnecting, present a persistent status near the actions, and restore interaction from the fresh room snapshot after reconnect.
   - **Expected benefit:** Players know when an action can reach the room and do not mistake a dropped tap for a completed move.
-  - **Files:** `client/RoomShell.tsx`, `client/screens/Lobby.tsx`, `client/screens/Table.tsx`, `client/components/Scoreboard.tsx`, `client/lib/useRoom.ts`
+  - **Files:** `client/RoomShell.tsx`, `client/screens/Lobby.tsx`, `client/screens/Table.tsx`, `client/components/Scoreboard.tsx`, `client/components/Overlays.tsx`, `client/lib/useRoom.ts`
   - **Depends on:** —
 
 - [ ] **AR-04 — Put the host's Ready step next to Start game** · Priority: **High** · Effort: S

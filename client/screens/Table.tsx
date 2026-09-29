@@ -34,6 +34,7 @@ interface TableProps {
   eventSeq: number;
   clockSkew: number;
   connectionNote: string | null;
+  connected: boolean;
   send: (message: ClientMessage) => void;
   onLeave: () => void;
 }
@@ -59,6 +60,7 @@ export function Table({
   eventSeq,
   clockSkew,
   connectionNote,
+  connected,
   send,
   onLeave,
 }: TableProps) {
@@ -214,10 +216,11 @@ export function Table({
 
   const act = useCallback(
     (message: ClientMessage) => {
+      if (!connected) return;
       unlockAudio();
       send(message);
     },
-    [send],
+    [connected, send],
   );
 
   const playCard = useCallback(
@@ -249,11 +252,12 @@ export function Table({
   });
 
   const draw = useCallback(() => {
+    if (!connected) return;
     const now = latestMoves.current;
     if (now.drawPending) return;
     setDrawSent(now.moves);
     act({ t: 'intent', intent: { type: 'DRAW' } });
-  }, [act]);
+  }, [act, connected]);
   const pass = useCallback(() => act({ t: 'intent', intent: { type: 'PASS' } }), [act]);
   const challenge = useCallback(
     () => act({ t: 'intent', intent: { type: 'CHALLENGE' } }),
@@ -416,7 +420,7 @@ export function Table({
       </div>
 
       {/* The middle */}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
+      <div inert={!connected} className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-4 ${connected ? '' : 'opacity-55'}`}>
         <CenterPiles
           discardTop={room.discardTop}
           drawCount={room.drawCount}
@@ -450,7 +454,7 @@ export function Table({
 
       {/* Your hand. `isolate` keeps the lifted card's z-index inside this
           section, so it cannot float over the scoreboard or a picker. */}
-      <div ref={handEl} className="isolate shrink-0">
+      <div ref={handEl} inert={!connected} className={`isolate shrink-0 ${connected ? '' : 'opacity-55'}`}>
         {you ? (
           <Hand
             cards={ordered}
@@ -480,6 +484,7 @@ export function Table({
           <ColorPicker
             key="colour"
             colorblind={prefs.colorblind}
+            disabled={!connected}
             onPick={(color: Color) => act({ t: 'intent', intent: { type: 'CHOOSE_COLOR', color } })}
           />
         )}
@@ -487,6 +492,7 @@ export function Table({
           <SwapPicker
             key="swap"
             players={room.players.filter((player) => player.id !== youId)}
+            disabled={!connected}
             onPick={(playerId) => act({ t: 'intent', intent: { type: 'CHOOSE_PLAYER', playerId } })}
           />
         )}
@@ -508,6 +514,7 @@ export function Table({
             onNextRound={() => act({ t: 'nextRound' })}
             onNewMatch={() => act({ t: 'newMatch' })}
             onLeave={onLeave}
+            connected={connected}
           />
         )}
       </AnimatePresence>
@@ -515,7 +522,7 @@ export function Table({
       <Chat
         messages={chat}
         open={chatOpen}
-        canTalk={!spectator}
+        canTalk={!spectator && connected}
         onClose={closeChat}
         onSend={sendChat}
         onEmote={sendEmote}
