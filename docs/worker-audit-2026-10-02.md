@@ -15,7 +15,7 @@ Tick an item only after implementation, local measurement and behavior verificat
 | Medium | 4 | 1 | Frame reuse ~0.057 ms/sync with 20 watchers; crypto draw loop ~0.113 ms/shuffle; lobby clone ~0.009 ms/start; join write CPU unknown |
 | Low | 1 | 0 | Two RNG calls per valid named fresh join |
 
-**Total saving per request, CPU-ms/day and monthly cost are unavailable.** Different savings affect different event types; summing them would invent a traffic mix and double-count some work. Production p50/p99, route shares, room spectator counts, and event frequencies remain unknown. Three items need a decision; WRK-04 was previously incorrectly labeled safe when removing its sync broadcast.
+**Total saving per request, CPU-ms/day and monthly cost are unavailable.** Different savings affect different event types; summing them would invent a traffic mix and double-count some work. Production p50/p99, route shares, room spectator counts, and event frequencies remain unknown. Five selected safe items are implemented and measured. Three items remain open and need decisions: WRK-01, WRK-03, WRK-04. WRK-04 was previously incorrectly labeled safe when removing its sync broadcast.
 
 ## Baseline
 
@@ -283,20 +283,23 @@ Unavailable without a supplied running build URL. Before source implementation, 
 
 ## Success Criteria Scorecard
 
-Audit-only: After columns remain pending. Local baseline values are references, not implemented results.
+Five selected items completed on 2026-10-03. After values below are final local CPU measurements, not production results. Final paired runs were measured against original code in the same benchmark process; timings varied from the initial runs, but each paired CPU check improved. Different workloads cannot be summed into an overall per-request or daily saving.
 
 | Worker / route | Metric | Before (production) | After (local / estimated) | After (production, post-deploy) |
 |---|---|---|---|---|
 | `unoonline` | CPU p50 / p75 / p99 | unavailable | pending | pending |
 | `unoonline` | requests/day / errors/day | unavailable | pending | pending |
 | `unoonline` | CPU-ms/day / monthly CPU cost | unavailable | pending | pending |
-| `Room` | event counts / CPU distribution / active duration / cost | unavailable | pending | pending |
+| `Room` | event counts / CPU distribution / active duration / cost | unavailable | unavailable; production verification needed | pending |
 | static routes | invocation share / script CPU | unavailable | pending | pending |
-| room intents | clone 32 / 3,200 records | unavailable (local baseline 0.065 / 1.088 ms) | pending | pending |
-| room sync | 20 spectator projections | unavailable (local baseline 0.060 ms) | pending | pending |
-| shuffle | 107 crypto draws | unavailable (local baseline 0.113 ms) | pending | pending |
-| startMatch | lobby clone | unavailable (local baseline 0.009 ms) | pending | pending |
-| `unoonline` | raw / gzip-9 bundle | unavailable (local baseline 74,607 / 20,838 B) | pending | pending |
+| room intents | clone after 3,200 exhausted-deck draws | unavailable (final paired old 1.963409 ms / 3,200 records) | 0.013442 ms / 2 records | pending |
+| room sync | actual sendSync, 20 spectators | unavailable (final paired old 0.087402 ms) | 0.005195 ms | pending |
+| shuffle | actual 107 crypto draws | unavailable (final paired old 0.198988 ms) | 0.008789 ms | pending |
+| startMatch | complete seeded setup | unavailable (final paired old 0.032788 ms) | 0.017365 ms | pending |
+| startNextRound | complete seeded setup with result hands | unavailable (final paired old 0.155313 ms) | 0.071725 ms | pending |
+| startMatch | complete crypto setup, combined WRK-06/07 | unavailable (final paired old 0.224027 ms) | 0.027169 ms | pending |
+| named spectator | resolver after buffered RNG | unavailable (final paired old 0.000689 ms / 2 fallback RNG calls) | 0.000522 ms / 0 calls | pending |
+| `unoonline` | raw / gzip-9 bundle | unavailable (local baseline 74,607 / 20,838 B) | 75,140 / 20,984 B (+533 / +146 B) | pending |
 
 ## Post-deploy Verification
 
@@ -309,4 +312,35 @@ Audit-only: After columns remain pending. Local baseline values are references, 
 
 ## Workflow Status
 
-Phases 1–6 complete with production/URL limitations disclosed. Phase 7 in progress on selected WRK-02/05/06/07/08; final Phase 8 checks pending. No deployment performed. Notification and final summary are reported in the assistant response.
+Phases 1–8 complete within the available code/local measurement mode. All five selected items are implemented, measured and independently committed. Production metrics and full running-URL parity remain unavailable; no deployment performed. Notification and final summary are reported in the assistant response.
+
+### Atomic implementation commits
+
+| Item | Commit | Change |
+|---|---|---|
+| WRK-02 | `8651a45` | Bound new duplicate pass records |
+| WRK-05 | `1856890` | Reuse spectator sync frames |
+| WRK-06 | `7c74307` | Buffer cryptographic random words |
+| WRK-07 | `54001e0` | Remove duplicate round setup clone |
+| WRK-08 | `9bc40c9` | Generate fallback nicknames lazily |
+
+### Final validation — 2026-10-03
+
+**Project type: Node / Cloudflare Worker + Durable Object.**
+
+| Check | Result | Evidence |
+|---|---|---|
+| Format | skipped | No formatter command/tool/config configured; `git diff --check` passes |
+| Lint | pass | `npm run lint` |
+| Typecheck | pass | `tsc -b` within `npm run build` |
+| Build | pass | `npm run build` |
+| Tests | pass | `npm run test:all`: 132 shared + 28 workerd integration tests |
+| Bundle | pass, size increased | Installed Wrangler deployment dry-run, final bytes in scorecard |
+| CPU comparisons | pass | Final `bench-pass`, `bench-sync`, `bench-rng`, `bench-round`, `bench-name` runs; all paired comparisons improve |
+| State / frame parity | pass for exercised fixtures | 2,700 seeded setup state/event comparisons; exact original/final mixed-view frame bytes and closed-socket continuation; name/Unicode/fallback parity; player/spectator projections and workerd privacy tests |
+| Full HTTP / browser parity | unavailable | No running build URL supplied; no dev server started |
+| Production CPU / costs | unavailable | User selected code/local estimates |
+
+Bundle growth is **533 B raw / 146 B gzip** (~0.7% each), from the bounded buffer and reuse/dedup logic. This is a measured size tradeoff, so a blanket claim that no metric grew would be incorrect. No startup regression was measured; startup CPU remains unmeasured. Each paired operation CPU measurement improves, including the one-spectator path. Legacy pass records are left until round reset; the new guard does not normalize already stored duplicates.
+
+The local result is ready for an authorized deployment; use the post-deploy checklist to verify actual CPU, DO duration, error rate and response behavior. Remaining IDs WRK-01/03/04 have no source changes and still need their explicit product/routing decisions.
