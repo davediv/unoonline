@@ -253,8 +253,8 @@ export class Room extends DurableObject<Env> {
 
     const name = cleanName(
       (url.searchParams.get('name') ?? '').replace(CONTROL_CHARS, ''),
-      randomNickname(cryptoRng),
-    );
+      '',
+    ) || randomNickname(cryptoRng);
     const requestedAvatar = Number(url.searchParams.get('avatar'));
     const avatar = Number.isFinite(requestedAvatar)
       ? Math.abs(Math.trunc(requestedAvatar))

@@ -180,6 +180,17 @@ describe('joining', () => {
     expect(room.players.map((p) => p.name)).toEqual(['Maya', 'Maya 2']);
   });
 
+  it('preserves cleaned names and generates a fallback only for empty names', async () => {
+    const code = await createRoom();
+    const named = await Client.open(code, { name: '  \u0001Maya\u007f  ' });
+    const namedWelcome = await named.welcome();
+    expect(namedWelcome.room.players.find((p) => p.id === namedWelcome.youId)?.name).toBe('Maya');
+    const anonymous = await Client.open(code, { name: ' \u0001\u007f ' });
+    const anonymousWelcome = await anonymous.welcome();
+    expect(anonymousWelcome.room.players.find((p) => p.id === anonymousWelcome.youId)?.name)
+      .toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  });
+
   it('creates a new room on the way in when asked, and seats its creator as host', async () => {
     const host = await Client.open('CRTEAB', { name: 'Maya', create: '1' });
     const welcome = await host.welcome();
