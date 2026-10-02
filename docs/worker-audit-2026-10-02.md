@@ -225,7 +225,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
   - **Before → After:** Complete seeded setup: startMatch 0.024408 → 0.013995 ms; startNextRound with result hands 0.129120 → 0.062945 ms (Node CPU median five × 5,000, precreated eight-seat fixtures). Removes exactly one clone while retaining exported startRound purity. 2,700 before/after seeded state/event comparisons passed across round setup variants; nested input-hand immutability regression and all 132 shared tests passed, plus lint and typecheck/build. Scratch: bench-round.mjs.
 
-- [ ] **WRK-08 — Avoid unused nickname randomness** · Priority: **Low** · Impact: Low · Effort: S · Risk: Low · Decision required: No
+- [x] **WRK-08 — Avoid unused nickname randomness** · Priority: **Low** · Impact: Low · Effort: S · Risk: Low · Decision required: No · done 2026-10-03
   - *Carried over from 2026-09-29; verified against current source.*
   - **Issue:** `worker/room.ts:254-257` eagerly calls `randomNickname(cryptoRng)` as the `cleanName` fallback even when a valid name is supplied, causing two unnecessary crypto draws (`shared/room.ts:41-45`). Applies to new WebSocket joins with names; share unknown.
   - **Optimization:** Clean once and generate a random fallback only when the cleaned result would be empty; preserve `cleanName` rules and generated-name behavior.
@@ -241,7 +241,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Depends on:** WRK-06 only if benchmarking the independent saving after RNG buffering.
   - **Measure:** named-join RNG-call count and local CPU benchmark; exact welcome-name parity; DO CPU on upgrades after deploy.
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
-  - **Before → After:** pending; all candidate numbers above are benchmarks, not implemented changes.
+  - **Before → After:** Actual resolveSeat method measured after WRK-06 buffering: valid named player/spectator fallback RNG calls 2 → 0. Named spectator resolution CPU 0.000899 → 0.000516 ms (Node median five × 50,000; isolated resolver, not full upgrade). Cleaned/fallback/Unicode name and avatar parity passed with deterministic draws; real workerd regression covers cleaned names and empty-name fallback. All 28 Worker tests plus lint and typecheck/build passed. Returning token path and fallback randomness preserved. Scratch: bench-name.mjs.
 
 
 ## Action Plan
