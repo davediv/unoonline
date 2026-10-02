@@ -677,7 +677,9 @@ function handleDraw(s: RoomState, playerId: string, ctx: EngineCtx, ev: GameEven
 
   // Drawing means you had nothing in the active colour — public information,
   // and the hard bot pays attention to it.
-  if (s.activeColor) s.passRecord.push({ playerId, color: s.activeColor });
+  if (s.activeColor && !s.passRecord.some((record) => record.playerId === playerId && record.color === s.activeColor)) {
+    s.passRecord.push({ playerId, color: s.activeColor });
+  }
 
   const player = s.players[index];
   const limit = s.rules.drawToMatch ? DECK_SIZE : 1;
