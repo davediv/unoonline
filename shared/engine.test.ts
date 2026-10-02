@@ -36,6 +36,28 @@ function expectDeckIntact(state: RoomState) {
  * ================================================================== */
 
 describe('round setup', () => {
+  it('keeps all setup inputs and nested hands unchanged', () => {
+    const initial = lobby(4);
+    initial.players[0].score = 23;
+    const original = structuredClone(initial);
+    const first = ok(startMatch(initial, ctx()));
+    expect(initial).toEqual(original);
+    expect(first.state.players[0].score).toBe(0);
+    expect(first.state.round).toBe(1);
+    const beforeRound = structuredClone(first.state);
+    const restarted = startRound(first.state, 1, ctx());
+    expect(first.state).toEqual(beforeRound);
+    restarted.state.players[0].hand.pop();
+    expect(first.state).toEqual(beforeRound);
+    first.state.phase = 'roundOver';
+    const finished = structuredClone(first.state);
+    const next = ok(startNextRound(first.state, ctx()));
+    expect(first.state).toEqual(finished);
+    expect(next.state.round).toBe(2);
+    next.state.players[0].hand.pop();
+    expect(first.state).toEqual(finished);
+  });
+
   it('deals seven cards each and flips one', () => {
     const result = roundWithTop('number', 4);
     for (const player of result.state.players) expect(player.hand).toHaveLength(7);

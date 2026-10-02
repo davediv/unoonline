@@ -206,7 +206,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
   - **Before → After:** Actual exported RNG: 107 draws 0.105753 → 0.006970 ms; full 8-player crypto startMatch 0.139815 → 0.029834 ms (Node CPU median five × 5,000, fixture setup outside timed loop). Buffer is 256 words / 1 KiB, lazily refilled from the same native cryptographic source; rejection limit unchanged. Tests cover crossing refill during rejection, no draw for max=1, batch consumption, and integer/range bounds. All 131 shared and 27 workerd tests plus lint and typecheck/build passed. Random exact deck order intentionally nondeterministic; seeded engine and wire privacy invariants passed. Scratch: bench-rng.mjs.
 
-- [ ] **WRK-07 — Remove redundant room clone on round setup** · Priority: **Medium** · Impact: Low to Medium · Effort: M · Risk: Medium · Decision required: No
+- [x] **WRK-07 — Remove redundant room clone on round setup** · Priority: **Medium** · Impact: Low to Medium · Effort: M · Risk: Medium · Decision required: No · done 2026-10-03
   - *Carried over from 2026-09-29; verified against current source.*
   - **Issue:** `shared/engine.ts:286-305` clones room state, then `startRound` clones it again at `shared/engine.ts:190-191`. Only start/next-round paths are affected. The larger `applyIntent` path also clones before dispatch (`shared/engine.ts:352-360`), but preserving atomic failure behavior makes a general refactor riskier.
   - **Optimization:** Pass a private mutable draft into round setup after exactly one clone; retain the exported pure `startRound` behavior.
@@ -223,7 +223,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Depends on:** —
   - **Measure:** `startMatch`/`startNextRound` CPU benchmark and full game-engine parity tests; DO CPU on round-start events after deploy.
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
-  - **Before → After:** pending; all candidate numbers above are benchmarks, not implemented changes.
+  - **Before → After:** Complete seeded setup: startMatch 0.024408 → 0.013995 ms; startNextRound with result hands 0.129120 → 0.062945 ms (Node CPU median five × 5,000, precreated eight-seat fixtures). Removes exactly one clone while retaining exported startRound purity. 2,700 before/after seeded state/event comparisons passed across round setup variants; nested input-hand immutability regression and all 132 shared tests passed, plus lint and typecheck/build. Scratch: bench-round.mjs.
 
 - [ ] **WRK-08 — Avoid unused nickname randomness** · Priority: **Low** · Impact: Low · Effort: S · Risk: Low · Decision required: No
   - *Carried over from 2026-09-29; verified against current source.*

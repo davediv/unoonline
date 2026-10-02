@@ -188,7 +188,12 @@ export function canPlay(s: RoomState, player: Player, card: Card): boolean {
  * them, reverse past them or hand them a colour choice.
  */
 export function startRound(state: RoomState, startIndex: number, ctx: EngineCtx): EngineOk {
-  const s = clone(state);
+  return startRoundDraft(clone(state), startIndex, ctx);
+}
+
+/** Callers own this draft; exported setup functions remain pure. */
+function startRoundDraft(s: RoomState, startIndex: number, ctx: EngineCtx): EngineOk {
+  const round = s.phase === 'lobby' ? 1 : s.round;
   const ev: GameEvent[] = [];
 
   s.phase = 'playing';
@@ -229,7 +234,7 @@ export function startRound(state: RoomState, startIndex: number, ctx: EngineCtx)
   s.drawPile = deck;
   s.discard = [top];
   s.activeColor = top.color;
-  s.round = state.phase === 'lobby' ? 1 : state.round;
+  s.round = round;
 
   ev.push({ t: 'roundStart', round: s.round, startingId: s.players[s.turn].id, topCard: top });
 
@@ -292,7 +297,7 @@ export function startMatch(state: RoomState, ctx: EngineCtx): EngineResult {
     p.score = 0;
     p.roundPoints = 0;
   }
-  return startRound(base, 0, ctx);
+  return startRoundDraft(base, 0, ctx);
 }
 
 /** Round over -> next round. The seat after the previous winner starts. */
@@ -302,7 +307,7 @@ export function startNextRound(state: RoomState, ctx: EngineCtx): EngineResult {
   base.round = state.round + 1;
   const winner = state.result ? playerIndex(state, state.result.winnerId) : -1;
   const startIndex = winner >= 0 ? (winner + 1) % base.players.length : 0;
-  return startRound(base, startIndex, ctx);
+  return startRoundDraft(base, startIndex, ctx);
 }
 
 /* ------------------------------------------------------------------ *
