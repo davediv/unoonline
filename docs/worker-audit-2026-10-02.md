@@ -4,7 +4,7 @@
 *Runtime: plain fetch handler, Vite/React client SPA, hibernating SQLite-backed DO · compatibility_date `2026-08-05` · no compatibility flags · assets via Worker first · bindings `ASSETS`, `ROOM`*
 *Previous audit: `docs/worker-audit-2026-09-29.md` — all 8 open IDs carried forward; no new standalone findings.*
 
-Tick an item only after implementation, local measurement and behavior verification. This audit changes no source and deploys nothing. The prior audit commit is the only commit after the prior audited source revision; the request paths remain unchanged.
+Tick an item only after implementation, local measurement and behavior verification. Source implementation follows the selected recommendations below; no deployment is performed. The prior audit commit is the only commit after the prior audited source revision; the request paths remain unchanged.
 
 ## Summary
 
@@ -112,7 +112,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
   - **Before → After:** pending; all candidate numbers above are benchmarks, not implemented changes.
 
-- [ ] **WRK-02 — Stop duplicate pass-record growth** · Priority: **Critical** · Impact: Medium, rising with round length · Effort: S · Risk: Low · Decision required: No
+- [x] **WRK-02 — Stop duplicate pass-record growth** · Priority: **Critical** · Impact: Medium, rising with round length · Effort: S · Risk: Low · Decision required: No · done 2026-10-03
   - *Carried over from 2026-09-29; verified against current source.*
   - **Issue:** `shared/engine.ts:678-680` appends the same `(playerId, color)` pair on every qualifying draw. `shared/bots.ts:241-244` only checks whether a pair exists. With at most eight seats and four colors, unique pairs cap at 32, while current records can grow without bound in a long round. Applies to game intents, bot alarms, state clone, and DO persistence; traffic share unknown.
   - **Why CPU-intensive:** Every subsequent successful intent clones the entire array (`shared/engine.ts:65-66,356`), each persisted room contains it (`worker/room.ts:867-875`), and hard bots scan it. Fresh local measurements: 32 records = 0.064612 ms / 8,783 B state JSON; 320 = 0.159994 ms / 18,431 B; 3,200 = 1.088200 ms / 114,911 B. The record colors use the actual red/yellow/green/blue values. Synthetic repetition models long rounds, not observed traffic.
@@ -129,7 +129,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Depends on:** —
   - **Measure:** compare repeated-draw state size, clone CPU, bot decision CPU, and Worker/DO CPU p99; verify bot decisions and public snapshots unchanged.
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
-  - **Before → After:** pending; all candidate numbers above are benchmarks, not implemented changes.
+  - **Before → After:** Actual before/after engine run: 3,200 successful draws on a two-seat, exhausted-deck fixture produced 3,200 → 2 records, state JSON 100,097 → 959 B, and subsequent clone CPU 1.130489 → 0.006862 ms (median five × 2,000 clones, Node V8). Player/spectator projections matched; all 128 shared tests passed including duplicate draw/color/purity regression, plus lint and typecheck/build. Formatting check unavailable (no formatter configured). New rounds are bounded; legacy persisted duplicates are intentionally left until reset. Scratch: bench-pass.mjs.
 
 - [ ] **WRK-03 — Let matching static assets bypass the Worker** · Priority: **High** · Impact: Unknown until asset request share is measured · Effort: L · Risk: High · Decision required: **Yes**
   - *Carried over from 2026-09-29; verified against current source.*
@@ -272,7 +272,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
 - WRK-01: recommend a 4,096 UTF-16-code-unit text-frame cap with a consistent oversized-frame error; alternative byte semantics/limit requires a different bounded guard.
 - WRK-03: retain prefix bridge until production data supports a selective Worker-first asset prototype.
 - WRK-04: recommend preserving sync broadcasts (A), then measure scheduling/persistence removal; skipping all broadcasts (B) changes clock-update behavior.
-- Implementation selection is pending Phase 6. Recommended safe set: WRK-02, WRK-05, WRK-06, WRK-07, WRK-08, sequentially, each measured and committed separately. The workflow requires item selection at Phase 6 before source implementation; no selection has been provided yet.
+- User selected the safe set: WRK-02, WRK-05, WRK-06, WRK-07, WRK-08, sequentially, each measured and committed separately. Implementation proceeds sequentially with one measured commit per selected item.
 
 ## Risks If the Current State Is Kept
 
@@ -309,4 +309,4 @@ Audit-only: After columns remain pending. Local baseline values are references, 
 
 ## Workflow Status
 
-Phases 1–5 completed with production/URL limitations disclosed. Phase 6 awaits implementation selection. Phases 7–8 not run because no source optimization has been selected. No deployment performed. Notification and final summary are reported in the assistant response.
+Phases 1–6 complete with production/URL limitations disclosed. Phase 7 in progress on selected WRK-02/05/06/07/08; final Phase 8 checks pending. No deployment performed. Notification and final summary are reported in the assistant response.

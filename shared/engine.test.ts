@@ -99,6 +99,22 @@ describe('round setup', () => {
  * ================================================================== */
 
 describe('playing cards', () => {
+  it('records each player and color once across repeated draws', () => {
+    const initial = table({ hands: { A: ['b1'], B: ['y1'] }, top: 'r5', drawPile: [] });
+    let state = initial;
+    for (let i = 0; i < 100; i++) {
+      state = ok(applyIntent(state, turnId(state), { type: 'DRAW' }, ctx())).state;
+    }
+    expect(state.passRecord).toEqual([
+      { playerId: 'A', color: 'red' },
+      { playerId: 'B', color: 'red' },
+    ]);
+    expect(initial.passRecord).toEqual([]);
+    state.activeColor = 'green';
+    state = ok(applyIntent(state, 'A', { type: 'DRAW' }, ctx())).state;
+    expect(state.passRecord).toContainEqual({ playerId: 'A', color: 'green' });
+  });
+
   it('accepts a colour match, a number match and a wild, and rejects the rest', () => {
     const state = table({ hands: { A: ['r3', 'b1', 'g8', 'w'], B: ['b5'] }, top: 'r1' });
     const moves = legalMoves(state, 'A');
