@@ -882,17 +882,24 @@ export class Room extends DurableObject<Env> {
   private sendSync(events: GameEvent[], chat: ChatMessage[], now: number): void {
     const state = this.room;
     if (!state) return;
+    let spectatorFrame: string | undefined;
 
     for (const socket of this.ctx.getWebSockets()) {
       const meta = this.metaOf(socket);
       if (!meta) continue;
+      if (meta.playerId === null && spectatorFrame !== undefined) {
+        this.send(socket, spectatorFrame);
+        continue;
+      }
       const visible = events.filter((event) => !('to' in event) || event.to === meta.playerId);
-      this.send(socket, {
+      const message: ServerMessage = {
         t: 'sync',
         room: serializeFor(state, meta.playerId, now),
         events: visible,
         chat: chat.length > 0 ? chat : undefined,
-      });
+      };
+      if (meta.playerId === null) spectatorFrame = JSON.stringify(message);
+      this.send(socket, spectatorFrame !== undefined && meta.playerId === null ? spectatorFrame : message);
     }
   }
 
@@ -924,9 +931,9 @@ export class Room extends DurableObject<Env> {
     if (this.chat.length > CHAT_HISTORY) this.chat.splice(0, this.chat.length - CHAT_HISTORY);
   }
 
-  private send(ws: WebSocket, message: ServerMessage): void {
+  private send(ws: WebSocket, message: ServerMessage | string): void {
     try {
-      ws.send(JSON.stringify(message));
+      ws.send(typeof message === 'string' ? message : JSON.stringify(message));
     } catch {
       // The socket went away mid-send; the close handler will tidy up.
     }

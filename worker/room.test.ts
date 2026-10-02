@@ -1,8 +1,8 @@
 import { env, runInDurableObject, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { BASE_PATH } from '../shared/base';
-import type { PublicRoom } from '../shared/types';
-import type { ClientMessage, ServerMessage } from '../shared/protocol';
+import type { GameEvent, PublicRoom } from '../shared/types';
+import type { ChatMessage, ClientMessage, ServerMessage } from '../shared/protocol';
 
 /** The app is mounted at a sub-path, so the tests knock on the real door. */
 const HOST = 'https://uno.test';
@@ -19,11 +19,13 @@ async function createRoom(): Promise<string> {
 /** A connected player, with the message plumbing tests need. */
 class Client {
   readonly messages: ServerMessage[] = [];
+  readonly frames: string[] = [];
   private socket: WebSocket;
 
   private constructor(socket: WebSocket) {
     this.socket = socket;
     socket.addEventListener('message', (event) => {
+      this.frames.push(event.data as string);
       this.messages.push(JSON.parse(event.data as string) as ServerMessage);
     });
     socket.accept();
@@ -239,10 +241,10 @@ describe('playing over the wire', () => {
     const hostTraffic = JSON.stringify(host.messages);
     const guestTraffic = JSON.stringify(guest.messages);
     for (const card of guestHand) {
-      expect(hostTraffic, `host saw ${card.id}`).not.toContain(card.id);
+      expect(hostTraffic, `host saw ${card.id}`).not.toContain(JSON.stringify(card.id));
     }
     for (const card of hostHand) {
-      expect(guestTraffic, `guest saw ${card.id}`).not.toContain(card.id);
+      expect(guestTraffic, `guest saw ${card.id}`).not.toContain(JSON.stringify(card.id));
     }
     // And the draw pile is a count, never a list.
     expect(hostTraffic).not.toContain('drawPile');
@@ -431,6 +433,36 @@ describe('reconnecting and watching', () => {
     expect(welcome.room.players.every((p) => p.hand === undefined)).toBe(true);
     expect(welcome.room.moves.playable).toEqual([]);
     void hostWelcome;
+  });
+
+  it('sends identical spectator sync bytes across protocols without private events', async () => {
+    const { code, host, guest, hostWelcome, guestWelcome } = await startedGame();
+    const legacy = await Client.open(code, { spectate: '1', v: '1' });
+    const compact = await Client.open(code, { spectate: '1', v: '2' });
+    await legacy.welcome();
+    await compact.welcome();
+    const hand = host.room().players.find((p) => p.id === hostWelcome.youId)?.hand ?? [];
+    const event: GameEvent = {
+      t: 'handRevealed', playerId: hostWelcome.youId!, hand, to: guestWelcome.youId!,
+    };
+    const stub = env.ROOM.get(env.ROOM.idFromName(code));
+    await runInDurableObject(stub, (instance) => {
+      const broadcaster = instance as unknown as {
+        sendSync(events: GameEvent[], chat: ChatMessage[], now: number): void;
+      };
+      broadcaster.sendSync([event], [], 123456);
+    });
+    const isUpdate = (m: ServerMessage) => m.t === 'sync' && m.room.now === 123456;
+    const views = await Promise.all([legacy, compact, host, guest].map((client) =>
+      client.waitFor<Extract<ServerMessage, { t: 'sync' }>>(isUpdate, 'privacy sync'),
+    ));
+    expect(views[0]).toEqual(views[1]);
+    expect(views[0].events).toEqual([]);
+    expect(views[0].room.players.every((p) => p.hand === undefined)).toBe(true);
+    expect(views[2].events).toEqual([]);
+    expect(views[3].events).toEqual([event]);
+    const frame = (client: Client) => client.frames.find((raw) => isUpdate(JSON.parse(raw)));
+    expect(frame(legacy)).toBe(frame(compact));
   });
 
   it('will not take an intent from a spectator', async () => {

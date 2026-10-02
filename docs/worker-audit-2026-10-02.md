@@ -169,7 +169,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Measure:** storage/timer operation counts, complete welcome/sync frame sequences and timestamps, initialization/promotion cases, DO CPU and active duration after deploy.
   - **Before → After:** pending; no source changed.
 
-- [ ] **WRK-05 — Reuse one spectator sync frame per commit** · Priority: **Medium** · Impact: Unknown · Effort: M · Risk: Medium · Decision required: No
+- [x] **WRK-05 — Reuse one spectator sync frame per commit** · Priority: **Medium** · Impact: Unknown · Effort: M · Risk: Medium · Decision required: No · done 2026-10-03
   - *Carried over from 2026-09-29; verified against current source.*
   - **Issue:** `worker/room.ts:882-896,927-929` builds a viewer-specific snapshot and JSON string for every socket. All spectators have the same `viewerId: null` and event visibility, so their state sync bytes can be identical. There is no seat cap for spectators; player views must remain separate.
   - **Optimization:** Lazily create one serialized spectator frame within each `sendSync` call and send that exact string to spectators; keep existing per-player projection and filtering. Example:
@@ -185,7 +185,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Depends on:** —
   - **Measure:** CPU benchmark at 1/5/20 spectators; byte-for-byte frame comparison, especially private events and promoted spectators; DO CPU by WebSocket event after deploy.
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
-  - **Before → After:** pending; all candidate numbers above are benchmarks, not implemented changes.
+  - **Before → After:** Extracted actual sendSync/send methods before/after with event filtering: 1 spectator 0.004672 → 0.004552 ms, 5 spectators 0.022129 → 0.004298 ms, 20 spectators 0.068325 → 0.003521 ms (Node CPU medians, five × 10,000 broadcasts). Exact mixed player/spectator frame bytes and closed-socket continuation matched. Real workerd integration verifies equal v1/v2 spectator bytes, hidden hands, and recipient-only private events; all 27 Worker tests passed, plus lint and typecheck/build. Corrected existing privacy assertion to compare complete quoted card IDs rather than substrings inside UUIDs. Chat paths unchanged. Scratch: bench-sync.mjs.
 
 - [ ] **WRK-06 — Buffer crypto words for shuffles** · Priority: **Medium** · Impact: Low to Medium · Effort: S · Risk: Medium · Decision required: No
   - *Carried over from 2026-09-29; verified against current source.*
