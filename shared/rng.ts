@@ -15,6 +15,10 @@ export interface Rng {
   int(max: number): number;
 }
 
+/** Request-independent crypto words, refilled lazily in bounded batches. */
+const randomWords = new Uint32Array(256);
+let randomOffset = randomWords.length;
+
 /**
  * Rejection sampling on top of `crypto.getRandomValues` — taking a plain
  * modulo would bias the low values.
@@ -22,14 +26,16 @@ export interface Rng {
 export const cryptoRng: Rng = {
   int(max: number): number {
     if (max <= 1) return 0;
-    const buf = new Uint32Array(1);
     // Largest multiple of `max` that fits in a uint32; anything at or above
     // it would skew the distribution, so we draw again.
     const limit = Math.floor(0x1_0000_0000 / max) * max;
     let value: number;
     do {
-      crypto.getRandomValues(buf);
-      value = buf[0];
+      if (randomOffset === randomWords.length) {
+        crypto.getRandomValues(randomWords);
+        randomOffset = 0;
+      }
+      value = randomWords[randomOffset++];
     } while (value >= limit);
     return value % max;
   },

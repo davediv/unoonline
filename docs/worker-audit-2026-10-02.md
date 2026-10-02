@@ -187,7 +187,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
   - **Before → After:** Extracted actual sendSync/send methods before/after with event filtering: 1 spectator 0.004672 → 0.004552 ms, 5 spectators 0.022129 → 0.004298 ms, 20 spectators 0.068325 → 0.003521 ms (Node CPU medians, five × 10,000 broadcasts). Exact mixed player/spectator frame bytes and closed-socket continuation matched. Real workerd integration verifies equal v1/v2 spectator bytes, hidden hands, and recipient-only private events; all 27 Worker tests passed, plus lint and typecheck/build. Corrected existing privacy assertion to compare complete quoted card IDs rather than substrings inside UUIDs. Chat paths unchanged. Scratch: bench-sync.mjs.
 
-- [ ] **WRK-06 — Buffer crypto words for shuffles** · Priority: **Medium** · Impact: Low to Medium · Effort: S · Risk: Medium · Decision required: No
+- [x] **WRK-06 — Buffer crypto words for shuffles** · Priority: **Medium** · Impact: Low to Medium · Effort: S · Risk: Medium · Decision required: No · done 2026-10-03
   - *Carried over from 2026-09-29; verified against current source.*
   - **Issue:** `shared/rng.ts:23-34` allocates a one-word array and calls `crypto.getRandomValues` for each random integer. `shared/deck.ts:74-82` uses 107 draws for a 108-card initial shuffle (`shared/engine.ts:211`). Most messages do not shuffle.
   - **Optimization:** Refill a bounded `Uint32Array(256)` when exhausted and keep the same rejection-sampling limit, cryptographic source, and integer range. Example:
@@ -204,7 +204,7 @@ Unavailable without a supplied running build URL. Before source implementation, 
   - **Depends on:** —
   - **Measure:** same 107-draw CPU benchmark, random bounds/distribution and rejection tests, start-round parity invariants, DO alarm/round CPU after deploy. Exact random card order is intentionally nondeterministic.
   - **Cost/day:** unavailable: production event counts and deployed CPU are unknown. DO savings must be modeled with DO active duration/storage billing, not the Worker CPU-ms rate.
-  - **Before → After:** pending; all candidate numbers above are benchmarks, not implemented changes.
+  - **Before → After:** Actual exported RNG: 107 draws 0.105753 → 0.006970 ms; full 8-player crypto startMatch 0.139815 → 0.029834 ms (Node CPU median five × 5,000, fixture setup outside timed loop). Buffer is 256 words / 1 KiB, lazily refilled from the same native cryptographic source; rejection limit unchanged. Tests cover crossing refill during rejection, no draw for max=1, batch consumption, and integer/range bounds. All 131 shared and 27 workerd tests plus lint and typecheck/build passed. Random exact deck order intentionally nondeterministic; seeded engine and wire privacy invariants passed. Scratch: bench-rng.mjs.
 
 - [ ] **WRK-07 — Remove redundant room clone on round setup** · Priority: **Medium** · Impact: Low to Medium · Effort: M · Risk: Medium · Decision required: No
   - *Carried over from 2026-09-29; verified against current source.*
